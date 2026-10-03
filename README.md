@@ -1,75 +1,26 @@
-# 016-calendar — Month-View Calendar
+# auto-calendar
 
-A month-view calendar grid with 7 columns, date cells, event highlights, and previous/next month navigation.
+日历，使用 AutoLang / AutoUI 开发的独立应用。
 
-## Concepts
+本仓是首批产品源码基线；当前能力以导入版本为准，仓库描述中的产品方向不表示全部已实现。
 
-- **Grid layout** — `grid { cols: 7 }` creates a 7-column calendar grid
-- **Grid items** — `grid-item { text "1" { ... } }` for individual date cells
-- **Date arithmetic** — month navigation with `PrevMonth` / `NextMonth` messages
-- **Event indicators** — highlighted dates with `bg-blue-100 rounded-full` styling
-- **Header navigation** — prev/next buttons flanking month/year display
+## 运行
 
-## Source
+安装对应版本的 `auto` CLI 后，从本仓根执行：
 
-See `src/front/app.at`:
-
-```auto
-widget App {
-    msg { PrevMonth, NextMonth }
-
-    model {
-        var month str = "April"
-        var year_display str = "2026"
-        var d1 str = "Su"
-        var d2 str = "Mo"
-        // ... day headers
-    }
-
-    view {
-        center {
-            col {
-                row {
-                    button "<" { onclick: .PrevMonth }
-                    col {
-                        text .month { class: "text-2xl font-bold" }
-                        text .year_display { class: "text-sm text-gray-500" }
-                    }
-                    button ">" { onclick: .NextMonth }
-                }
-                row {
-                    text .d1 { class: "text-xs font-semibold text-gray-400 ..." }
-                    // ... 7 day headers
-                }
-                grid {
-                    grid-item { text "1" { class: "..." } }
-                    grid-item { text "5" { class: "... bg-blue-100 rounded-full" } }
-                    // ... 35 date cells
-                    cols: 7
-                    gap: 0
-                }
-                class: "w-full max-w-md p-6 bg-white rounded-2xl shadow-lg"
-            }
-        }
-    }
-
-    on {
-        .PrevMonth -> { .month = "March" }
-        .NextMonth -> { .month = "May" }
-    }
-}
+```sh
+auto run
+auto run -r vm
 ```
 
-## How to Run
+前端端口：`17820`。
 
-```bash
-cd examples/ui/016-calendar
-auto gen              # Generate code for all backends (vue, jet, ark, rust)
-auto run              # Run dev server
-```
+共享 StyleKit 已固定在 `vendor/stylekit`，无需相邻 auto-lang 示例目录。
 
-After `auto gen`, generated projects appear in:
-- `gen/vue/` — Vue 3 + shadcn-vue
-- `gen/jet/` — Jetpack Compose (Kotlin)
-- `gen/ark/` — ArkTS (HarmonyOS)
-- `gen/rust/` — Rust GPUI
+## 来源与组合
+
+来源提交、路径与文件 hash 见 `SOURCE-IMPORT.json`。首次导入提交保留在 `source-sync` 分支；完整 v0.5 恢复后从该基线导入差异，再与产品开发线合并。
+
+AutoOS 通过 [`apps/016-calendar`](https://github.com/auto-stack/auto-os/tree/v0.6-dev/apps/016-calendar) submodule 固定本仓版本；教学 Demo 保留在来源仓。
+
+已有测试随源导入；端口与平台相关测试需要按本仓配置准备运行环境。安装/启动与双端完整功能验收是不同检查项。

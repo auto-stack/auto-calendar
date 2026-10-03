@@ -13,5 +13,6 @@ window: "fit"
 desktop: "true"
 
 dep stylekit {
-    path: "../stylekit"
+    path: "vendor/stylekit"
 }
+front_port: 17820
