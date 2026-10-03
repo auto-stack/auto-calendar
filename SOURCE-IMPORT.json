@@ -1,0 +1,53 @@
+{
+  "repository": "auto-calendar",
+  "date": "2026-10-03",
+  "sources": [
+    {
+      "repo": "auto-lang",
+      "commit": "17292c07e792e80d4e4da5495fc3fc2917e8aa1e",
+      "path": "examples/ui/016-calendar",
+      "primary": true,
+      "fileCount": 5,
+      "pacFields": {
+        "name": "calendar",
+        "version": "1.0.0",
+        "scene": "ui",
+        "render": "vue",
+        "title": "Calendar",
+        "title_zh": "日历",
+        "theme": "light",
+        "accent": "indigo",
+        "window": "fit",
+        "desktop": "true"
+      },
+      "files": [
+        {
+          "sourcePath": "examples/ui/016-calendar/README.md",
+          "path": "README.md",
+          "sha256": "2057b203a2cb0dc49d31e453cc7e4e641aa806ae8b3c0bc350834e1d97ca6427"
+        },
+        {
+          "sourcePath": "examples/ui/016-calendar/pac.at",
+          "path": "pac.at",
+          "sha256": "9cd7b9983d2cc495651ef3128f7f3a67a54a4c5b8ece9fd8219c2859d421fd12"
+        },
+        {
+          "sourcePath": "examples/ui/016-calendar/src/front/app.at",
+          "path": "src/front/app.at",
+          "sha256": "ed759e5aaf11825292f9ead8fcdd023b7960d3efe8d54d1fdd5355233784c5f4"
+        },
+        {
+          "sourcePath": "examples/ui/016-calendar/src/front/calendar_store.at",
+          "path": "src/front/calendar_store.at",
+          "sha256": "c3b3ded5d4f04e7cb7b019440992e2c87197b8959ce4e5c93d1f8ff6e702e200"
+        },
+        {
+          "sourcePath": "examples/ui/016-calendar/src/front/calendar_util.at",
+          "path": "src/front/calendar_util.at",
+          "sha256": "bd15f63a28533da344dcd128ddebfd797ca7a4f11ecaebad6cac5db0169cf33f"
+        }
+      ]
+    }
+  ],
+  "note": "Exact committed source snapshots; packaging changes follow in a separate commit. References are not additional installed apps."
+}
