@@ -2,16 +2,10 @@
 //
 // All functions here are PURE AUTO (no #[vm]) so they transpile to every
 // backend (VM / a2r / a2vue) with zero transpiler changes — see Plan 323.
-// "Today" is obtained from the existing #[vm] DateTime primitives
-// (now / year / month / format), which are VM-only today; mapping them in
-// a2r + a2vue is the Phase 1 follow-up noted in the plan.
-//
 // Plan 522: this module's fns are now ALSO consumed by the Vue SFC — the
 // vue generator transpiles the referenced helpers into App.vue's script
 // (use calendar_util: build_month_grid, month_name in app.at), so the
 // computed-derived grid works on both backends from the same source.
-
-use datetime
 
 // NOTE on cell representation: cells are plain Obj literals
 //   { label: <day-num str>, date: <YYYY-MM-DD>, is_other_month: <bool>,

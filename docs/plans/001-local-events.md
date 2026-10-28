@@ -1,12 +1,12 @@
 ---
 plan_id: CALENDAR-001
-status: drafting
+status: execution_done
 feature_name: local-events
 author: [Codex]
 created_at: 2026-10-29
 updated_at: 2026-10-29
 plan_revision: 2
-current_step: 4
+current_step: 5
 total_steps: 7
 supersedes_spec_components: []
 new_spec_components: [docs/specs/calendar/basic-capabilities.md]
@@ -110,7 +110,8 @@ T-02..04按下列任务依赖顺序推进；T-05将本节拟议测试做成真�
   - [✅ 已完成] store 接后端权威时钟：Init/Today/月导航重查 /now，真实今日驱动网格（2026-10-29，硬编码日期全部移除）；事件按月域/单日域由后端过滤（NowInfo/CalEvent 增加 year/month/day 与 start_ymd/end_ymd 整数面，前端零字符串解析）；CreateEvent/UpdateEvent/DeleteEvent 消息接入 CRUD 并刷新月/日工作集；时钟/仓储失败显式 banner（无假数据）。双端真实验证：Vue 轨 Playwright 探针 11/11（真实今日、日期归属、月导航、重开持久）；VM 轨 autoui MCP 探针 9/9（同上+VM 状态面）。脚本/日志 local-only：attachments/001/t03_vue_probe.mjs、t03_vm_probe.py、run-t03-*.log。新增 tests/free_ports.py（孤儿 dev-server 端口清理，探针发现 vite 端口漂移会撞后端端口）。
 - [x] T-04（owner_stage=work；依赖 T-03；AC-01..04）：界面与真实日期：扩展 calendar_store.at / app.at 的事件列表与编辑表单；月导航保留，Today 使用实际本地日期；失败保留表单，不显示虚假保存。
   - [✅ 已完成] 事件表单（store 持有草稿：OpenCreate/OpenEdit/FormTitle/Start/End/Notes/CancelForm/SaveForm），日面板行内编辑/删除按钮，月份导航与 Today 真实日期保持；保存失败 → 表单不关、输入保留、显式错误横幅（AC-03），成功才关闭并刷新月/日工作集，无虚假保存。双端真实验证：Vue Playwright 9/9（建→显→改时→倒置拒绝且输入保留→删除→重开干净）；VM autoui MCP 5/5（表单打开、真实输入键入（autoui_type）、创建内容逐字段核对、清理）。脚本/日志 local-only：attachments/001/t04_vue_probe.mjs、t04_vm_probe.py、run-t04-*。发现并修复 .store.rev→.store.store_rev 字段名笔误（曾致 expected_rev undefined/HTTP 422）；条件标签需用 if 视图对（if 表达式作 widget 标签不解析），均记入决策文件。
-- [ ] T-05（owner_stage=work；依赖 T-02..04；AC-01..04）：完成独立数据/失败回放和两端真实UI验收，新建 `tests/basic/verify_basic.py` 调度入口（可复用既有脚本），同时保存命令/输入hash/真实结果与原始失败；准备 canonical Spec 增量，提交实现，转 execution_done。
+- [x] T-05（owner_stage=work；依赖 T-02..04；AC-01..04）：完成独立数据/失败回放和两端真实UI验收，新建 `tests/basic/verify_basic.py` 调度入口（可复用既有脚本），同时保存命令/输入hash/真实结果与原始失败；准备 canonical Spec 增量，提交实现，转 execution_done。
+  - [✅ 已完成] `tests/basic/verify_basic.py`（`--profile vue|vm`）落地并双绿：vue 17/17、vm 11/11（当前源码、隔离数据目录、端口被占即失败）。覆盖 V-01 可控时钟（注入闰日 2028-02-29 渲染 + 跨午夜 2026-12-31→Today + 重开后回真实钟）、V-02 同日双事件+跨月事件+稳定 id（reopen 后 id 集不变）+双端表单创建逐字段核对、V-03 非法日期(2029-02-29)与倒置区间拒绝 + 表单输入逐字保留 + 无虚假事件。证据 JSON（含 auto bin hash 与逐项结果）local-only：attachments/001/verify-{vue,vm}-*.json；UI 驱动 tests/basic/vue_driver.mjs（仓内自有 playwright@1.63.0）。canonical Spec 增量草稿已备：docs/specs/calendar/basic-capabilities.md（SD-01/02，merge 复核后生效）；README 补运行/数据/验收入口。移除 calendar_util.at 死 use datetime（VM DIAG 噪音源）。统一回归门保持 pending（owner=最终复审/merge）。
 - [ ] T-06（owner_stage=review；依赖 T-05；AC-05）：在同一app检出暂停实现，按冻结提交、真实数据和独立反例最终复审；核对Spec增量与双端结果，说明上下文独立性限制；未满足返回修复，不将数据错误降为债务。
 - [ ] T-07（owner_stage=merge；依赖 T-06；AC-06）：完成实际提交/推送/父仓gitlink验证，沉淀canonical Spec与derived ledger、归档；刷新总表A/B与证据，组合子模块显式detach，独立开发clone留在main。Linux仍等待发行版门，不因文档或脚本存在宣布已可用。
 
@@ -118,11 +119,12 @@ T-02..04按下列任务依赖顺序推进；T-05将本节拟议测试做成真�
 
 - 历史 r1起草回执见 `611d1e5e1933a519db8cf82824aab4427c5a4424`；其开发位置/收尾状态描述由本次修订替代，既有功能与验收合同保留。
 - stage: new | plan_id: CALENDAR-001 | plan_revision: 2 | outcome: pass（独立clone路径修订就绪；功能未实施/未验收） | next: work/T-01（另行执行）。
-- stage: goal | plan_id: CALENDAR-001 | plan_revision: 2 | round: 1 | from: drafting | to: work | status: drafting→executing | outcome: pass | worktree: D:/autostack/auto-calendar（独立clone，main，按计划§2覆盖默认worktree规约） | commit: （T-01提交见下） | next: work（授权链：用户 /goal 经 auto-plan-goal 一线授权 work→review→bounded repair→merge）。
+- stage: goal | plan_id: CALENDAR-001 | plan_revision: 2 | round: 1 | from: drafting | to: work | status: execution_done→executing | outcome: pass | worktree: D:/autostack/auto-calendar（独立clone，main，按计划§2覆盖默认worktree规约） | commit: （T-01提交见下） | next: work（授权链：用户 /goal 经 auto-plan-goal 一线授权 work→review→bounded repair→merge）。
 - stage: work | plan_id: CALENDAR-001 | plan_revision: 2 | outcome: pass | worktree_path: D:/autostack/auto-calendar | branch: main | base_commit: c1e5c56 | code_commit: 见T-01提交 | dependency_revisions: auto CLI 0.1.0+v0.0.20-117-g873fa23（auto-man e6cc06f build）；auto-lang a748017da（只读依据） | task_ids: T-01 | evidence=docs/plans/evidence/001/capability-decision.md（探针：双端split mode、后端真实墙钟shell.exec/PowerShell、可控时钟注入、隔离目录fs回环全过；缺项time facade/chrono/tz具名归auto-lang） | blockers=无 | next_responsible_role=work（T-02）。
 - stage: work | plan_id: CALENDAR-001 | plan_revision: 2 | outcome: pass | worktree_path: D:/autostack/auto-calendar | branch: main | base_commit: 1f457e3 | code_commit: 见T-02提交 | dependency_revisions: 同上 | task_ids: T-02 | evidence=src/back/{api,db,repository}.at + capability-decision §3.8/§3.10（HTTP级电池：创建/拒绝/范围/冲突/更新保留/删除清理/重启持久/损坏恢复/可控时钟全过，日志 attachments/001/run-t02-r*.log） | blockers=无（转译层约束已固化为写码规则，见决策文件 §3.10） | next_responsible_role=work（T-03）。
 - stage: work | plan_id: CALENDAR-001 | plan_revision: 2 | outcome: pass | worktree_path: D:/autostack/auto-calendar | branch: main | base_commit: bd5605d | code_commit: 见T-03提交 | dependency_revisions: 同上 | task_ids: T-03 | evidence=src/front/{types,calendar_store,calendar_util,app}.at + src/back ymd 面（Vue Playwright 11/11、VM autoui MCP 9/9，日志 attachments/001/run-t03-*、t03_*_probe.*） | blockers=无（发现并绕开两类生成器怪癖：store 内禁 local fn；方法参数名不得遮蔽 store 字段，均记入决策文件） | next_responsible_role=work（T-04）。
 - stage: work | plan_id: CALENDAR-001 | plan_revision: 2 | outcome: pass | worktree_path: D:/autostack/auto-calendar | branch: main | base_commit: ec718fd | code_commit: 见T-04提交 | dependency_revisions: 同上 | task_ids: T-04 | evidence=src/front/{app,calendar_store}.at 表单/按钮 + 双端探针（Vue 9/9、VM 5/5，attachments/001/t04_*、run-t04-*） | blockers=无（.store.rev 笔误修复；if 标签视图对模式记入决策文件） | next_responsible_role=work（T-05）。
+- stage: work | plan_id: CALENDAR-001 | plan_revision: 2 | outcome: pass | worktree_path: D:/autostack/auto-calendar | branch: main | base_commit: 90fe9dc | code_commit: 见T-05提交 | dependency_revisions: 同上 | task_ids: T-01..T-05 | evidence=tests/basic/verify_basic.py + vue_driver.mjs（vue 17/17、vm 11/11，verify-{vue,vm}-*.json local-only）+ docs/specs/calendar/basic-capabilities.md 草稿 | readiness: AC-01(可控时钟闰日/跨午夜/重开回真实钟,两端)、AC-02(中文单次事件闭环+稳定id+重开恢复,两端)、AC-03(非法/倒置拒绝+输入保留+重启/损坏恢复,T-02电池+V-03)、AC-04(双端空库到删除全流程,verify 双 profile)均绑定上述断言；开放契约发现=无；统一回归门 pending（owner=复审/merge） | blockers=无 | next_responsible_role=review（T-06 final review, review_scope=final）。
 - 本次只改工作位置、跨仓链接与AC-06/T-07的检出收尾说明，不变更基础能力要求；独立clone开发，组合子模块只固定已交付版本。
 - 本轮核对源码/Spec缺口、历史任务、路径、基线和计划唯一性；未执行实现/功能测试，所有7项任务保持未勾选；通过的是草案结构/相互引用检查，不是产品验收。
 
