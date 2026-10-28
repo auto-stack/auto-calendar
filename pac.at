@@ -15,4 +15,7 @@ desktop: "true"
 dep stylekit {
     path: "vendor/stylekit"
 }
+# CALENDAR-001 T-01: split-mode backend (rust service) probed on 17821.
+api: "rust"
 front_port: 17820
+back_port: 17821

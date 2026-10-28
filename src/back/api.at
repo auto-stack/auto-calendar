@@ -1,0 +1,20 @@
+// CALENDAR-001 T-01 capability probe endpoints (round 2).
+// Probes: shell.exec host clock (powershell), env override, fs round-trip.
+// Round-1 negative evidence (kept in capability-decision.md): embedded
+// a2r_std facade has no `time` module (E0433); api_gen workspace has no
+// chrono dep (use.rs import unresolved); struct-literal returns invalid.
+// Probe-only surface: T-02 replaces this file with the real events contract.
+
+// ─── Probe endpoints (all return str: hand-built JSON, proven notes pattern)
+
+/// Host clock + data dir + test-mode flag.
+#[api(method = "GET", path = "/api/v1/probe/status")]
+pub fn probe_status() str {
+    return db.probe_status()
+}
+
+/// fs round-trip inside the isolated data dir (AUTO_CALENDAR_DATA override).
+#[api(method = "GET", path = "/api/v1/probe/fs")]
+pub fn probe_fs() str {
+    return db.probe_fs()
+}

@@ -1,0 +1,120 @@
+// CALENDAR-001 T-01 capability probe implementations (round 2).
+// Probes the real a2r backend surface this plan depends on: shell.exec host
+// clock (powershell invariant output), env override, fs round-trip.
+// Probe-only surface: T-02 replaces this file with the real service layer.
+
+use auto.env
+use auto.fs
+use auto.json
+// NOTE: `use auto.shell` emits a broken `use crate::shell;` import (use_stmt
+// remap gap); the qualified `shell.exec` call routes fine without it.
+
+// ─── data root (isolated override per plan §6 test isolation)
+
+pub fn data_root() str {
+    var over str = env.get("AUTO_CALENDAR_DATA")
+    if over != "" {
+        return over
+    }
+    var base str = env.get("APPDATA")
+    if base != "" {
+        return base + "/auto-calendar"
+    }
+    var xdg str = env.get("XDG_DATA_HOME")
+    if xdg != "" {
+        return xdg + "/auto-calendar"
+    }
+    var home str = env.get("HOME")
+    if home != "" {
+        return home + "/.local/share/auto-calendar"
+    }
+    return "./auto-calendar-data"
+}
+
+/// Host wall clock via powershell (invariant culture), pipe-joined:
+/// "YYYY-MM-DD HH:mm:ss|epoch_ms|offset_minutes".
+/// Named gap: embedded a2r_std facade lacks `time` (auto-lang owner); when
+/// closed this becomes time.* without contract change.
+pub fn host_now_parts() str {
+    var ps str = "powershell -NoProfile -EncodedCommand WwBEAGEAdABlAFQAaQBtAGUATwBmAGYAcwBlAHQAXQA6ADoATgBvAHcALgBUAG8AUwB0AHIAaQBuAGcAKAAnAHkAeQB5AHkALQBNAE0ALQBkAGQAIABIAEgAOgBtAG0AOgBzAHMAJwApACAAKwAgACcAfAAnACAAKwAgAFsARABhAHQAZQBUAGkAbQBlAE8AZgBmAHMAZQB0AF0AOgA6AE4AbwB3AC4AVABvAFUAbgBpAHgAVABpAG0AZQBNAGkAbABsAGkAcwBlAGMAbwBuAGQAcwAoACkAIAArACAAJwB8ACcAIAArACAAWwBUAGkAbQBlAFoAbwBuAGUASQBuAGYAbwBdADoAOgBMAG8AYwBhAGwALgBHAGUAdABVAHQAYwBPAGYAZgBzAGUAdAAoAFsARABhAHQAZQBUAGkAbQBlAE8AZgBmAHMAZQB0AF0AOgA6AE4AbwB3ACkALgBUAG8AdABhAGwATQBpAG4AdQB0AGUAcwAuAFQAbwBTAHQAcgBpAG4AZwAoACcAMAAnACkA"
+    var raw str = shell.exec(ps, 10000)
+    var env_var = json.parse(raw)
+    var code int = json.as_int(json.get(env_var, "exit_code"))
+    if code != 0 {
+        return "ERR:" + json.encode(code) + ":" + json.as_string(json.get(env_var, "stderr"))
+    }
+    return json.as_string(json.get(env_var, "stdout"))
+}
+
+pub fn test_mode() bool {
+    return env.get("AUTO_CALENDAR_TEST_MODE") == "1"
+}
+
+/// Fake-now override (test mode only): "YYYY-MM-DD HH:mm" [+ "|offset_min"].
+pub fn fake_now_parts() str {
+    var fake str = env.get("AUTO_CALENDAR_FAKE_NOW")
+    if fake == "" {
+        return ""
+    }
+    var off str = env.get("AUTO_CALENDAR_FAKE_OFFSET_MIN")
+    if off == "" {
+        off = "0"
+    }
+    return fake + "|0|" + off
+}
+
+// ─── probe implementations
+
+pub fn probe_status() str {
+    var now_parts str = ""
+    if test_mode() {
+        now_parts = fake_now_parts()
+    }
+    if now_parts == "" {
+        now_parts = host_now_parts()
+    }
+    var s str = "{\"ok\":true,\"now_parts\":"
+    s = s + json.encode(now_parts)
+    s = s + ",\"data_dir\":"
+    s = s + json.encode(data_root())
+    s = s + ",\"test_mode\":"
+    if test_mode() {
+        s = s + "true"
+    } else {
+        s = s + "false"
+    }
+    s = s + "}"
+    return s
+}
+
+pub fn probe_fs() str {
+    var dir str = data_root()
+    var mk bool = fs.mkdir_all(dir)
+    var f str = dir + "/t01-probe.txt"
+    var w bool = fs.write_text(f, "t01-payload")
+    var rb str = fs.read_text(f)
+    var match_rb bool = rb == "t01-payload"
+    var fdel str = dir + "/t01-probe.txt"
+    var del bool = fs.delete(fdel)
+    var fchk str = dir + "/t01-probe.txt"
+    var still bool = fs.exists(fchk)
+    var ok_all bool = mk && w && match_rb && del && !still
+    var s str = "{\"ok\":"
+    if ok_all {
+        s = s + "true"
+    } else {
+        s = s + "false"
+    }
+    s = s + ",\"mkdir\":"
+    s = s + json.encode(mk)
+    s = s + ",\"write\":"
+    s = s + json.encode(w)
+    s = s + ",\"readback\":"
+    s = s + json.encode(rb)
+    s = s + ",\"deleted\":"
+    s = s + json.encode(del)
+    s = s + ",\"still_there\":"
+    s = s + json.encode(still)
+    s = s + "}"
+    return s
+}
