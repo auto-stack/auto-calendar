@@ -34,6 +34,14 @@ store CalendarStore {
         var day_events []CalEvent = []
         var store_rev int = 0
         var store_err str = ""
+        var form_open bool = false
+        var form_mode str = "create"
+        var form_id str = ""
+        var form_rev int = 0
+        var f_title str = ""
+        var f_start str = ""
+        var f_end str = ""
+        var f_notes str = ""
         var dark_mode bool = false
         var accent_color str = "indigo"
         var show_settings bool = false
@@ -50,6 +58,14 @@ store CalendarStore {
         CreateEvent(str, str, str, str),
         UpdateEvent(str, int, str, str, str, str),
         DeleteEvent(str, int),
+        OpenCreate,
+        OpenEdit(str, int, str, str, str, str),
+        FormTitle(str),
+        FormStart(str),
+        FormEnd(str),
+        FormNotes(str),
+        CancelForm,
+        SaveForm,
         ToggleDarkMode,
         SetTheme(str),
         SetAccent(str),
@@ -233,6 +249,85 @@ store CalendarStore {
             .store_rev = r.rev
             .store_err = r.err_code
             if r.ok {
+                var first = .FmtDate(.year, .month, 1)
+                var last = .FmtDate(.year, .month, .DaysInMonth(.year, .month))
+                var lst = events_list(first, last)
+                if lst.ok {
+                    .month_events = lst.events
+                    .store_rev = lst.rev
+                }
+                var day = events_list(.selected_date, .selected_date)
+                if day.ok {
+                    .day_events = day.events
+                }
+            }
+        }
+
+        // ── form lifecycle (draft state lives in the store so a failed save
+        // keeps the user's input — AC-03; notes draft convention)
+
+        .OpenCreate -> {
+            .form_mode = "create"
+            .form_id = ""
+            .form_rev = 0
+            .f_title = ""
+            .f_start = .selected_date + " 09:00"
+            .f_end = .selected_date + " 10:00"
+            .f_notes = ""
+            .form_open = true
+            .store_err = ""
+        }
+
+        .OpenEdit(id, expected_rev, title, start, end, notes) -> {
+            .form_mode = "edit"
+            .form_id = id
+            .form_rev = expected_rev
+            .f_title = title
+            .f_start = start
+            .f_end = end
+            .f_notes = notes
+            .form_open = true
+            .store_err = ""
+        }
+
+        .FormTitle(v) -> {
+            .f_title = v
+        }
+
+        .FormStart(v) -> {
+            .f_start = v
+        }
+
+        .FormEnd(v) -> {
+            .f_end = v
+        }
+
+        .FormNotes(v) -> {
+            .f_notes = v
+        }
+
+        .CancelForm -> {
+            .form_open = false
+            .store_err = ""
+        }
+
+        .SaveForm -> {
+            if .form_mode == "edit" {
+                var r = event_update(.form_id, .form_rev, .f_title, .f_start, .f_end, .f_notes)
+                .store_rev = r.rev
+                .store_err = r.err_code
+                if r.ok {
+                    .form_open = false
+                }
+            } else {
+                var r = event_create(.f_title, .f_start, .f_end, .f_notes)
+                .store_rev = r.rev
+                .store_err = r.err_code
+                if r.ok {
+                    .form_open = false
+                }
+            }
+            if .form_open == false {
                 var first = .FmtDate(.year, .month, 1)
                 var last = .FmtDate(.year, .month, .DaysInMonth(.year, .month))
                 var lst = events_list(first, last)

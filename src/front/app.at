@@ -6,6 +6,8 @@ style nav_round_btn = "w-10 h-10 rounded-full hover:bg-accent text-foreground fo
 style settings_label = "text-xs text-muted-foreground font-medium"
 style theme_btn_idle = "flex-1 py-1 px-2 text-xs font-medium rounded-md text-muted-foreground hover:bg-accent border border-border bg-transparent transition-colors"
 style theme_btn_active = "flex-1 py-1 px-2 text-xs font-medium rounded-md bg-primary text-primary-foreground transition-colors"
+style form_input = "w-full h-9 rounded-md border border-border bg-background px-2.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary"
+style form_label = "text-xs text-muted-foreground font-medium"
 
 widget App {
     msg {
@@ -17,6 +19,15 @@ widget App {
         ToggleDarkMode,
         SetTheme(str),
         SetAccent(str),
+        OpenCreate,
+        OpenEdit(str, int, str, str, str, str),
+        FormTitle(str),
+        FormStart(str),
+        FormEnd(str),
+        FormNotes(str),
+        CancelForm,
+        SaveForm,
+        DeleteEvent(str, int),
     }
 
     model {
@@ -104,10 +115,18 @@ widget App {
                         }
                     }
 
-                    // Selected-day events (CALENDAR-001 T-03: backend-attributed)
+                    // Selected-day events (CALENDAR-001 T-03/T-04: backend-attributed)
                     col {
                         style: "w-full mt-4 pt-3 border-t border-border gap-1.5"
-                        text f"${.store.selected_date} 的事件" { style: "text-xs font-semibold text-foreground uppercase tracking-wider" }
+                        row {
+                            style: "w-full items-center justify-between"
+                            text f"${.store.selected_date} 的事件" { style: "text-xs font-semibold text-foreground uppercase tracking-wider" }
+                            button "＋ 新建" {
+                                onclick: .OpenCreate
+                                variant: "ghost"
+                                style: "px-2.5 py-1 text-xs font-medium rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                            }
+                        }
                         if .store.day_events.len() == 0 {
                             text "无事件" { style: "text-sm text-muted-foreground py-1" }
                         }
@@ -121,7 +140,94 @@ widget App {
                                         text ev.notes { style: "text-xs text-muted-foreground" }
                                     }
                                 }
-                                text f"${ev.start} - ${ev.end}" { style: "text-xs text-muted-foreground whitespace-nowrap" }
+                                row {
+                                    style: "items-center gap-1"
+                                    text f"${ev.start} - ${ev.end}" { style: "text-xs text-muted-foreground whitespace-nowrap" }
+                                    button "编辑" {
+                                        onclick: .OpenEdit(ev.id, .store.store_rev, ev.title, ev.start, ev.end, ev.notes)
+                                        variant: "ghost"
+                                        style: "px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground rounded bg-transparent transition-colors"
+                                    }
+                                    button "删除" {
+                                        onclick: .DeleteEvent(ev.id, .store.store_rev)
+                                        variant: "ghost"
+                                        style: "px-1.5 py-0.5 text-xs text-destructive hover:bg-destructive/10 rounded bg-transparent transition-colors"
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Event form (store-held draft: a failed save keeps input)
+                    if .store.form_open {
+                        col {
+                            style: "w-full mt-3 p-3 border border-border rounded-xl gap-2"
+                            if .store.form_mode == "edit" {
+                                text "编辑事件" { style: "text-xs font-semibold text-foreground uppercase tracking-wider" }
+                            } else {
+                                text "新建事件" { style: "text-xs font-semibold text-foreground uppercase tracking-wider" }
+                            }
+                            col {
+                                style: "gap-1"
+                                text "标题" { style: form_label }
+                                input {
+                                    value: .store.f_title
+                                    oninput: .FormTitle
+                                    placeholder: "事件标题"
+                                    style: form_input
+                                }
+                            }
+                            col {
+                                style: "gap-1"
+                                text "开始（YYYY-MM-DD HH:mm）" { style: form_label }
+                                input {
+                                    value: .store.f_start
+                                    oninput: .FormStart
+                                    placeholder: "2026-01-01 09:00"
+                                    style: form_input
+                                }
+                            }
+                            col {
+                                style: "gap-1"
+                                text "结束（YYYY-MM-DD HH:mm）" { style: form_label }
+                                input {
+                                    value: .store.f_end
+                                    oninput: .FormEnd
+                                    placeholder: "2026-01-01 10:00"
+                                    style: form_input
+                                }
+                            }
+                            col {
+                                style: "gap-1"
+                                text "备注" { style: form_label }
+                                textarea {
+                                    value: .store.f_notes
+                                    oninput: .FormNotes
+                                    placeholder: "备注（可选）"
+                                    style: "w-full h-16 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary resize-none"
+                                }
+                            }
+                            if .store.store_err != "" {
+                                text f"保存失败：${.store.store_err}（输入已保留，请修正后重试）" { style: "text-xs text-destructive" }
+                            }
+                            row {
+                                style: "w-full justify-end gap-2 pt-1"
+                                button "取消" {
+                                    onclick: .CancelForm
+                                    variant: "ghost"
+                                    style: "px-3 py-1.5 text-xs font-medium rounded-lg text-muted-foreground hover:bg-accent bg-transparent transition-colors"
+                                }
+                                if .store.form_mode == "edit" {
+                                    button "保存修改" {
+                                        onclick: .SaveForm
+                                        style: "px-3 py-1.5 text-xs font-semibold rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                                    }
+                                } else {
+                                    button "保存" {
+                                        onclick: .SaveForm
+                                        style: "px-3 py-1.5 text-xs font-semibold rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                                    }
+                                }
                             }
                         }
                     }
@@ -243,6 +349,42 @@ widget App {
         .SetAccent(name) -> {
             store.SetAccent(name)
             .accent_color = .store.accent_color
+        }
+
+        .OpenCreate -> {
+            store.OpenCreate()
+        }
+
+        .OpenEdit(id, expected_rev, title, start, end, notes) -> {
+            store.OpenEdit(id, expected_rev, title, start, end, notes)
+        }
+
+        .FormTitle(v) -> {
+            store.FormTitle(v)
+        }
+
+        .FormStart(v) -> {
+            store.FormStart(v)
+        }
+
+        .FormEnd(v) -> {
+            store.FormEnd(v)
+        }
+
+        .FormNotes(v) -> {
+            store.FormNotes(v)
+        }
+
+        .CancelForm -> {
+            store.CancelForm()
+        }
+
+        .SaveForm -> {
+            store.SaveForm()
+        }
+
+        .DeleteEvent(id, expected_rev) -> {
+            store.DeleteEvent(id, expected_rev)
         }
     }
 }
