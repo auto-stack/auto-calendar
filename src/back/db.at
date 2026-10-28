@@ -48,7 +48,7 @@ pub fn test_mode() bool {
 }
 
 fn now_err(err str) NowInfo {
-    var r1 NowInfo = NowInfo { ok: false, date: "", time: "", epoch_ms: "", offset_min: 0, source: "", err: err }
+    var r1 NowInfo = NowInfo { ok: false, date: "", time: "", year: 0, month: 0, day: 0, epoch_ms: "", offset_min: 0, source: "", err: err }
     return r1
 }
 
@@ -112,7 +112,8 @@ pub fn now() NowInfo {
     if !repository.valid_hhmm_at(time, 0) {
         return now_err("clock_unavailable")
     }
-    var r3 NowInfo = NowInfo { ok: true, date: date, time: time, epoch_ms: epoch, offset_min: off, source: source, err: "" }
+    var ymd int = repository.date_ymd_at(date, 0)
+    var r3 NowInfo = NowInfo { ok: true, date: date, time: time, year: ymd / 10000, month: ymd / 100 % 100, day: ymd % 100, epoch_ms: epoch, offset_min: off, source: source, err: "" }
     return r3
 }
 
@@ -157,12 +158,14 @@ pub fn status() StoreStatus {
 // ─── typed event helpers
 
 fn empty_event() CalEvent {
-    var r CalEvent = CalEvent { id: "", title: "", start: "", end: "", notes: "", created_offset_min: 0, created_epoch_ms: "" }
+    var r CalEvent = CalEvent { id: "", title: "", start: "", end: "", notes: "", created_offset_min: 0, created_epoch_ms: "", start_ymd: 0, end_ymd: 0 }
     return r
 }
 
 fn cal_event_of(doc str) CalEvent {
     var it = json.parse(doc)
+    var ev_start str = json.as_string(json.get(it, "start"))
+    var ev_end str = json.as_string(json.get(it, "end"))
     var r CalEvent = CalEvent {
         id: json.as_string(json.get(it, "id")),
         title: json.as_string(json.get(it, "title")),
@@ -170,7 +173,9 @@ fn cal_event_of(doc str) CalEvent {
         end: json.as_string(json.get(it, "end")),
         notes: json.as_string(json.get(it, "notes")),
         created_offset_min: json.as_int(json.get(it, "created_offset_min")),
-        created_epoch_ms: json.as_string(json.get(it, "created_epoch_ms"))
+        created_epoch_ms: json.as_string(json.get(it, "created_epoch_ms")),
+        start_ymd: repository.date_ymd_at(ev_start, 0),
+        end_ymd: repository.date_ymd_at(ev_end, 0)
     }
     return r
 }

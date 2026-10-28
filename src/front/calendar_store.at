@@ -1,14 +1,39 @@
-// Plan 522: month_label / days left the store — they are now WIDGET computed
-// in app.at (calling calendar_util's month_name / build_month_grid), so the
-// ×4 handler recalc chain (.Init/.PrevMonth/.NextMonth/.Today/.SelectDay →
-// self.Rebuild()) is gone: mutating year/month/selected_date re-derives the
-// grid automatically on both backends.
+// calendar_store.at — CALENDAR-001 single state source (T-03).
+//
+// Backend-authoritative model (docs/plans/evidence/001/capability-decision.md §3):
+//   - "Today" only comes from GET /api/v1/now (no fixed date, no front clock);
+//     every Init/Today/month-nav re-queries, so cross-midnight/leap/year
+//     transitions are driven by real data.
+//   - Events come from GET /api/v1/events with month / single-day ranges;
+//     day attribution is backend-filtered (no string compare in the store).
+//   - Clock/store failures surface as clock_ok=false / store_err and the UI
+//     must show an explicit error state — never fake data.
+//
+// Store idioms (proven in auto-notes NOTES-001):
+//   - API calls stay INLINE in the handler whose body consumes the result
+//     (the generator marks exactly those methods async on the vue track).
+//   - Date math is local pure copies of calendar_util's fns (fmt_date /
+//     days_in_month / is_leap) — keeps the store self-contained; parity is
+//     pinned by V-01 replay and the Spec delta.
+//   - start_ymd/end_ymd (backend-computed ints) enable day-marker math with
+//     pure int comparisons on both UI tracks.
+
+use back.api: now, events_list, event_create, event_update, event_delete
+
 store CalendarStore {
     model {
-        var year int = 2026
-        var month int = 6
-        var today str = "2026-06-17"
-        var selected_date str = "2026-06-17"
+        var year int = 0
+        var month int = 0
+        var today str = ""
+        var today_ymd int = 0
+        var clock_ok bool = false
+        var clock_source str = ""
+        var selected_date str = ""
+        var selected_ymd int = 0
+        var month_events []CalEvent = []
+        var day_events []CalEvent = []
+        var store_rev int = 0
+        var store_err str = ""
         var dark_mode bool = false
         var accent_color str = "indigo"
         var show_settings bool = false
@@ -19,7 +44,12 @@ store CalendarStore {
         PrevMonth,
         NextMonth,
         Today,
-        SelectDay(str),
+        SelectDay(str, int),
+        DaysInMonth(int, int),
+        FmtDate(int, int, int),
+        CreateEvent(str, str, str, str),
+        UpdateEvent(str, int, str, str, str, str),
+        DeleteEvent(str, int),
         ToggleDarkMode,
         SetTheme(str),
         SetAccent(str),
@@ -27,35 +57,194 @@ store CalendarStore {
     }
 
     on {
+        // ── pure date math (kept in parity with calendar_util.at; V-01 replays both)
+        // NOTE: param names must not shadow store fields (year/month exist) —
+        // the generator would emit field refs (.value) for shadowed params.
+        .DaysInMonth(yy, mm) -> {
+            let dim [12]int = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+            var leap bool = (yy % 4 == 0 && yy % 100 != 0) || yy % 400 == 0
+            if mm == 2 && leap {
+                return 29
+            }
+            return dim[mm - 1]
+        }
+
+        .FmtDate(yy, mm, dd) -> {
+            var ms = mm.to_string()
+            if mm < 10 {
+                ms = "0" + ms
+            }
+            var ds = dd.to_string()
+            if dd < 10 {
+                ds = "0" + ds
+            }
+            return yy.to_string() + "-" + ms + "-" + ds
+        }
+
         .Init -> {
-            .year = 2026
-            .month = 6
-            .today = "2026-06-17"
-            .selected_date = "2026-06-17"
             .dark_mode = false
             .accent_color = "indigo"
+            var n = now()
+            if n.ok {
+                .today = n.date
+                .today_ymd = n.year * 10000 + n.month * 100 + n.day
+                .clock_ok = true
+                .clock_source = n.source
+                .year = n.year
+                .month = n.month
+                .selected_date = n.date
+                .selected_ymd = .today_ymd
+                .store_err = ""
+            } else {
+                .clock_ok = false
+                .store_err = n.err
+            }
+            var first = .FmtDate(.year, .month, 1)
+            var last = .FmtDate(.year, .month, .DaysInMonth(.year, .month))
+            var lst = events_list(first, last)
+            if lst.ok {
+                .month_events = lst.events
+                .store_rev = lst.rev
+            } else {
+                .store_err = lst.err_code
+            }
+            var day = events_list(.selected_date, .selected_date)
+            if day.ok {
+                .day_events = day.events
+            }
         }
 
         .PrevMonth -> {
             var total = .year * 12 + (.month - 1) - 1
             .year = total / 12
             .month = total % 12 + 1
+            var first = .FmtDate(.year, .month, 1)
+            var last = .FmtDate(.year, .month, .DaysInMonth(.year, .month))
+            var lst = events_list(first, last)
+            if lst.ok {
+                .month_events = lst.events
+                .store_rev = lst.rev
+                .store_err = ""
+            } else {
+                .store_err = lst.err_code
+            }
         }
 
         .NextMonth -> {
             var total = .year * 12 + (.month - 1) + 1
             .year = total / 12
             .month = total % 12 + 1
+            var first = .FmtDate(.year, .month, 1)
+            var last = .FmtDate(.year, .month, .DaysInMonth(.year, .month))
+            var lst = events_list(first, last)
+            if lst.ok {
+                .month_events = lst.events
+                .store_rev = lst.rev
+                .store_err = ""
+            } else {
+                .store_err = lst.err_code
+            }
         }
 
         .Today -> {
-            .year = 2026
-            .month = 6
-            .selected_date = .today
+            var n = now()
+            if n.ok {
+                .today = n.date
+                .today_ymd = n.year * 10000 + n.month * 100 + n.day
+                .clock_ok = true
+                .clock_source = n.source
+                .year = n.year
+                .month = n.month
+                .selected_date = n.date
+                .selected_ymd = .today_ymd
+                .store_err = ""
+            } else {
+                .clock_ok = false
+                .store_err = n.err
+            }
+            var first = .FmtDate(.year, .month, 1)
+            var last = .FmtDate(.year, .month, .DaysInMonth(.year, .month))
+            var lst = events_list(first, last)
+            if lst.ok {
+                .month_events = lst.events
+                .store_rev = lst.rev
+            } else {
+                .store_err = lst.err_code
+            }
+            var day = events_list(.selected_date, .selected_date)
+            if day.ok {
+                .day_events = day.events
+            }
         }
 
-        .SelectDay(date) -> {
+        .SelectDay(date, day_ymd) -> {
             .selected_date = date
+            .selected_ymd = day_ymd
+            var day = events_list(date, date)
+            if day.ok {
+                .day_events = day.events
+                .store_rev = day.rev
+                .store_err = ""
+            } else {
+                .store_err = day.err_code
+            }
+        }
+
+        .CreateEvent(title, start, end, notes) -> {
+            var r = event_create(title, start, end, notes)
+            .store_rev = r.rev
+            .store_err = r.err_code
+            if r.ok {
+                var first = .FmtDate(.year, .month, 1)
+                var last = .FmtDate(.year, .month, .DaysInMonth(.year, .month))
+                var lst = events_list(first, last)
+                if lst.ok {
+                    .month_events = lst.events
+                    .store_rev = lst.rev
+                }
+                var day = events_list(.selected_date, .selected_date)
+                if day.ok {
+                    .day_events = day.events
+                }
+            }
+        }
+
+        .UpdateEvent(id, expected_rev, title, start, end, notes) -> {
+            var r = event_update(id, expected_rev, title, start, end, notes)
+            .store_rev = r.rev
+            .store_err = r.err_code
+            if r.ok {
+                var first = .FmtDate(.year, .month, 1)
+                var last = .FmtDate(.year, .month, .DaysInMonth(.year, .month))
+                var lst = events_list(first, last)
+                if lst.ok {
+                    .month_events = lst.events
+                    .store_rev = lst.rev
+                }
+                var day = events_list(.selected_date, .selected_date)
+                if day.ok {
+                    .day_events = day.events
+                }
+            }
+        }
+
+        .DeleteEvent(id, expected_rev) -> {
+            var r = event_delete(id, expected_rev)
+            .store_rev = r.rev
+            .store_err = r.err_code
+            if r.ok {
+                var first = .FmtDate(.year, .month, 1)
+                var last = .FmtDate(.year, .month, .DaysInMonth(.year, .month))
+                var lst = events_list(first, last)
+                if lst.ok {
+                    .month_events = lst.events
+                    .store_rev = lst.rev
+                }
+                var day = events_list(.selected_date, .selected_date)
+                if day.ok {
+                    .day_events = day.events
+                }
+            }
         }
 
         .ToggleDarkMode -> {

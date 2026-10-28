@@ -1,0 +1,18 @@
+// types.at — front view of the CALENDAR-001 event contract.
+//
+// Mirror of back/api.at CalEvent (notes-app convention: the front keeps a
+// local view-model type; V-01 replay pins the field parity between both).
+// start_ymd / end_ymd are backend-computed y*10000+m*100+d so the store can
+// attribute events to days with pure int math (vue track has no char_at).
+
+type CalEvent {
+    id str
+    title str
+    start str
+    end str
+    notes str
+    created_offset_min int
+    created_epoch_ms str
+    start_ymd int
+    end_ymd int
+}

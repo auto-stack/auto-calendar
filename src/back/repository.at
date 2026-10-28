@@ -75,6 +75,16 @@ fn int_at(s str, from int, count int) int {
     return acc
 }
 
+/// y*10000 + m*100 + d for the "YYYY-MM-DD" at byte offset `at` — lets the
+/// front compare dates with pure int math (no string ops on the vue track).
+/// Caller guarantees valid_date_at(s, at) first.
+pub fn date_ymd_at(s str, at int) int {
+    var y int = int_at(s, at, 4)
+    var m int = int_at(s, at + 5, 2)
+    var d int = int_at(s, at + 8, 2)
+    return y * 10000 + m * 100 + d
+}
+
 /// "YYYY-MM-DD" read at byte offset `at` inside s (fixed-format positions).
 pub fn valid_date_at(s str, at int) bool {
     var n int = s.len()

@@ -19,3 +19,8 @@ __pycache__/
 
 # transpile sidecars (auto trans / api_gen)
 *.a2r.rs.assembly.json
+
+# Evidence policy (2026-10-28 ruling): everything under docs/plans/attachments/
+# is local-only working evidence, except deliberate *.md summaries/contracts.
+docs/plans/attachments/**
+!docs/plans/attachments/**/*.md

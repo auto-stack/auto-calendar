@@ -82,11 +82,17 @@ pub fn add_months_month(year int, month int, n int) int {
     return total % 12 + 1
 }
 
+/// y*10000 + m*100 + d — lets the store compare/attribution dates with pure
+/// int math on both UI tracks (backend events carry start_ymd/end_ymd).
+pub fn ymd_of(year int, month int, day int) int {
+    return year * 10000 + month * 100 + day
+}
+
 /// Build the 42-cell (6-week) grid for a month as Obj literals.
 /// `today` / `selected` are "YYYY-MM-DD" strings used for the
 /// today/selected highlight classes (cell_class).
 ///
-/// Each cell Obj: { label: <day-num str>, date: <YYYY-MM-DD>, is_other_month: <bool>, cell_class: <tailwind str> }
+/// Each cell Obj: { label: <day-num str>, date: <YYYY-MM-DD>, ymd: <int>, is_other_month: <bool>, cell_class: <tailwind str> }
 pub fn build_month_grid(year int, month int, today str, selected str) {
     // Plain `[]` + `.push()` (015-notes pattern, proven in VM widget handlers).
     // Not `List.new` (needs `use list`) and not `.to_array()` (cells is already
@@ -104,7 +110,7 @@ pub fn build_month_grid(year int, month int, today str, selected str) {
     for i < offset {
         let d = prev_dim - offset + 1 + i
         let ds = format_date(prev_year, prev_month, d)
-        cells.push({ label: d.to_string(), date: ds, is_other_month: true, cell_class: day_style(ds == today, ds == selected, true) })
+        cells.push({ label: d.to_string(), date: ds, ymd: ymd_of(prev_year, prev_month, d), is_other_month: true, cell_class: day_style(ds == today, ds == selected, true) })
         i = i + 1
     }
 
@@ -112,7 +118,7 @@ pub fn build_month_grid(year int, month int, today str, selected str) {
     var day = 1
     for day <= dim {
         let ds = format_date(year, month, day)
-        cells.push({ label: day.to_string(), date: ds, is_other_month: false, cell_class: day_style(ds == today, ds == selected, false) })
+        cells.push({ label: day.to_string(), date: ds, ymd: ymd_of(year, month, day), is_other_month: false, cell_class: day_style(ds == today, ds == selected, false) })
         day = day + 1
     }
 
@@ -122,7 +128,7 @@ pub fn build_month_grid(year int, month int, today str, selected str) {
     var nday = 1
     for cells.len() < 42 {
         let ds = format_date(next_year, next_month, nday)
-        cells.push({ label: nday.to_string(), date: ds, is_other_month: true, cell_class: day_style(ds == today, ds == selected, true) })
+        cells.push({ label: nday.to_string(), date: ds, ymd: ymd_of(next_year, next_month, nday), is_other_month: true, cell_class: day_style(ds == today, ds == selected, true) })
         nday = nday + 1
     }
 
