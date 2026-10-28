@@ -54,7 +54,7 @@ v1 以「后端权威时钟 + 墙钟事件模型」冻结，不受缺口阻塞�
 ## 3. 冻结决策（v1 最小闭环）
 
 1. **架构**：双端统一 split mode；后端 = a2r rust axum（pac.at `api:"rust"`），端口 17821；每数据目录单写者。
-2. **时间模型（后端权威时钟）**：`GET /api/v1/now` → `{date:"YYYY-MM-DD", time:"HH:mm", epoch_ms, offset_min, source:"host"|"test"}`；实现 = shell.exec PowerShell（不变文化输出，Windows；Linux 另等发行版门）。前端**不取本地时钟**：Init / Today / 月份导航 / 保存前后均重查 /now ⇒ 跨午夜、跨年、闰年由真实数据驱动，无固定日期残留（旧 `2026-06-17` 硬编码全部移除）。后端不可达 ⇒ 显式错误态，不显示假数据。
+2. **时间模型（后端权威时钟）**：`GET /api/v1/now` → `{date:"YYYY-MM-DD", time:"HH:mm", epoch_ms, offset_min, source:"host"|"test"}`；实现 = shell.exec PowerShell（不变文化输出，Windows；Linux 另等发行版门）。前端**不取本地时钟**：今日值在 Init / Today 时从 /now 获取（月份导航为前端纯月历推算，保存的创建事实由服务端在创建时生成），跨午夜/跨年/闰年由真实数据驱动，无固定日期残留（旧 `2026-06-17` 硬编码全部移除）；重开应用必回真实钟。后端不可达 ⇒ 显式错误态，不显示假数据。
 3. **可控时钟（V-01）**：test mode 注入 `AUTO_CALENDAR_FAKE_DATE`（`YYYY-MM-DD`）+ `AUTO_CALENDAR_FAKE_TIME`（`HH:mm`）+ 可选 `AUTO_CALENDAR_FAKE_OFFSET_MIN`（缺省 0=UTC，测试语义显式记录）——日期/时间分变量，杜绝注入值解析；双端同源注入。（T-02 修订：原单一 `AUTO_CALENDAR_FAKE_NOW` 需字符串切分，违反无 substr 约束。）
 4. **事件模型（单次事件）**：稳定 id `ev-<seq>`（后端单调）；字段 title / start / end（`YYYY-MM-DD HH:mm` 墙钟）/ notes / created_offset_min（创建时刻设备偏移）/ created_epoch_ms。**墙钟语义：不声明时刻（instant），不伪装完整时区**（满足计划 §2"不通过固定 UTC 偏移伪装完整时区"）。
 5. **校验（AC-03）**：后端纯 .at 校验——日历有效性（闰年/月日，datecalc 纯函数）、HH:mm 范围、end > start；非法输入返回结构化 err_code，前端保留原输入。**边界（诚实声明）**：DST 时刻歧义检测需 tz 数据库，当前后端不可达 ⇒ v1 墙钟输入不存在"歧义时刻"解释问题（存什么显什么，不静默改时刻）；instant 级歧义拒绝列为缺口 §4-1 的关闭红利，Spec 增量按此准确表述。

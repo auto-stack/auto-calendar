@@ -31,9 +31,11 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.request
 
@@ -241,8 +243,17 @@ def run_node_phase(phase):
     return checks, proc.returncode == 0 and bool(checks)
 
 
+def fresh_data_dir(profile):
+    """F-1: every run gets its own empty data dir (permanent replay must be
+    re-runnable; a reused store makes the fresh-store assertions false-red)."""
+    base = tempfile.mkdtemp(prefix=f"cal001-{profile}-")
+    data_dir = os.path.join(base, "data")
+    os.makedirs(data_dir, exist_ok=True)
+    return data_dir
+
+
 def run_vue(check):
-    data_dir = os.path.join(EVIDENCE_DIR, "vdata-vue")
+    data_dir = fresh_data_dir("vue")
     log_path = os.path.join(log_dir_for_run(), "verify-vue-app.log")
     check("ports-free", free_ports(), f"front {FRONT_PORT} / back {BACK_PORT}")
 
@@ -252,7 +263,9 @@ def run_vue(check):
         ok, why = wait_ready("vue", log_path)
         if not check("app-ready", ok, why):
             return
-        checks, _ = run_node_phase("main")
+        checks, node_ok = run_node_phase("main")
+        if not check("driver-main-results", node_ok and bool(checks), "no RESULTS payload from vue_driver"):
+            return
         for c in checks:
             check(c["name"], c["ok"], c["detail"])
         lst = http_json("GET", "/api/v1/events?from_date=2028-02-01&to_date=2028-04-30")
@@ -266,7 +279,9 @@ def run_vue(check):
         ok, why = wait_ready("vue", log_path)
         if not check("restart-ready", ok, why):
             return
-        checks, _ = run_node_phase("midnight")
+        checks, node_ok = run_node_phase("midnight")
+        if not check("driver-midnight-results", node_ok and bool(checks), "no RESULTS payload from vue_driver"):
+            return
         for c in checks:
             check(c["name"], c["ok"], c["detail"])
 
@@ -279,7 +294,7 @@ def run_vue(check):
 
 
 def run_vm(check):
-    data_dir = os.path.join(EVIDENCE_DIR, "vdata-vm")
+    data_dir = fresh_data_dir("vm")
     log_dir = log_dir_for_run()
     log_path = os.path.join(log_dir, "verify-vm-app.log")
     check("ports-free", free_ports(), f"front {FRONT_PORT} / back {BACK_PORT}")
@@ -294,7 +309,8 @@ def run_vm(check):
             m = re.search(r'button #(vnode_\d+|aura_\d+) "' + re.escape(label) + '"', snap)
             return m.group(1) if m else None
 
-        state = mcp_state_retry(["today", "selected_date", "year", "month", "clock_ok"], wait_flag="today")
+        # wait for the VALUE (field names match pre-Init state and would race)
+        state = mcp_state_retry(["today", "selected_date", "year", "month", "clock_ok"], wait_flag="2028-02-29")
         check("v01-vm-injected-today", "2028-02-29" in state, state[:160].replace(chr(10), " "))
         snap = mcp_call("autoui_snapshot")
         check("v01-vm-leap-month", ("February" in snap and "2028" in snap))
@@ -306,8 +322,13 @@ def run_vm(check):
             if not btn:
                 return False
             mcp_call("autoui_action", element_id=btn, action="press")
-            time.sleep(1.5)
-            snap = mcp_call("autoui_snapshot")
+            form_snap = ""
+            for _ in range(15):
+                form_snap = mcp_call("autoui_snapshot")
+                if "新建事件" in form_snap:
+                    break
+                time.sleep(1)
+            snap = form_snap
             inputs = re.findall(r'(?:input|textbox) #(vnode_\d+|aura_\d+)', snap)
             if len(inputs) < 3:
                 return False
@@ -329,7 +350,7 @@ def run_vm(check):
 
         # V-03 via backend + UI retention: invalid date rejected through form
         vm_create("VM-V03无效", "2029-02-29 10:00", "2029-02-29 11:00")
-        state = mcp_state_retry(["store_err", "form_open"], wait_flag="store_err")
+        state = mcp_state_retry(["store_err", "form_open"], wait_flag="invalid_start")
         check("v03-vm-invalid-rejected", ("invalid_start" in state) and ("form_open: true" in state),
               state[:160].replace(chr(10), " "))
         lst = http_json("GET", "/api/v1/events?from_date=2029-01-01&to_date=2029-12-31")
@@ -343,9 +364,11 @@ def run_vm(check):
             return
         lst = http_json("GET", "/api/v1/events?from_date=2028-02-29&to_date=2028-02-29")
         check("v02-vm-reopen-persist", lst.get("count") == 2, str(lst.get("count")))
-        state = mcp_state_retry(["today"], wait_flag="today")
-        check("v01-vm-real-clock-after-reopen", "2026-10-29" in state,
-              state[:120].replace(chr(10), " "))
+        expected_today = dt.date.today().isoformat()
+        state = mcp_state_retry(["today"], wait_flag=expected_today)
+        expected_today = dt.date.today().isoformat()
+        check("v01-vm-real-clock-after-reopen", expected_today in state,
+              state[:120].replace(chr(10), " ") + f" (expect {expected_today})")
     finally:
         kill_all()
 
@@ -381,7 +404,7 @@ def main():
         with open(out, "w", encoding="utf-8") as fh:
             json.dump({"profile": args.profile, "ts": ts,
                        "auto_bin": AUTO_BIN,
-                       "auto_bin_sha256": hashlib.sha256(open(AUTO_BIN, "rb").read(1 << 20)).hexdigest()[:16],
+                       "auto_bin_sha256": hashlib.sha256(open(AUTO_BIN, "rb").read()).hexdigest(),
                        "results": check.results,
                        "summary": check.summary,
                        "elapsed_s": round(time.time() - started, 1)}, fh, ensure_ascii=False, indent=1)

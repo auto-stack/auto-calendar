@@ -30,7 +30,12 @@
   是**信息记录**，不构成完整时区声明（不通过固定偏移伪装时区）。
 - **时钟权威**：`GET /api/v1/now` 由后端宿主钟提供
   `{date, time, year, month, day, epoch_ms, offset_min, source}`；前端不取本地
-  时钟。Init / Today / 月份导航 / 保存前后重查，跨午夜/跨年/闰年由真实数据驱动。
+  时钟。今日值只在 Init 与 Today 动作时从 /now 获取（月份导航在前端做纯月历
+  推算，不重查）；跨午夜/跨年/闰年由真实数据驱动——今日标记与选择随最近一次
+  now 查询走，重开应用必回真实钟。
+- 创建事实（`created_offset_min / created_epoch_ms`）由后端在创建那一刻取
+  宿主钟生成；宿主钟不可用时事件仍可创建，两字段落零值/空串——它们是信息
+  记录，不参与任何合同判定（F-7 说明）。
 - 可控时钟（测试合同）：`AUTO_CALENDAR_TEST_MODE=1` 时以
   `AUTO_CALENDAR_FAKE_DATE` / `AUTO_CALENDAR_FAKE_TIME` /
   `AUTO_CALENDAR_FAKE_OFFSET_MIN`（缺省 0=UTC）注入，双端同源；生产环境不设置。
@@ -59,6 +64,10 @@
   - manifest 损坏/丢失：扫描 events 目录按 id 取最高版本重建（零填充版本号
     保证文件序=数值序）。
 - 删除移除该 id 的全部版本文件（恢复不可复活已删除事件）。
+- 已知限制：manifest 损坏重建时全局 rev 取自幸存事件文件的最高版本；删除会使
+  真实全局 rev 高于幸存文件版本，重建后的 rev 可能回退，理论上允许一个持有
+  陈旧 expected_rev 的写者通过乐观校验。单写者 + 人工操作节奏下风险可忽略；
+  后续修订可将全局 rev 持久化到独立位置消除此窗口（F-5 注记）。
 - 冲突模型：变更携带 `expected_rev`（调用方最近可见的全局 store revision）；
   不匹配 → `err_code:"conflict"`，前端不清空表单、重取后由用户重试，绝不静默覆盖。
 - 结构化错误面（HTTP 始终 200 + 信封，或 422 反序列化错误由前端视为传输失败）：
