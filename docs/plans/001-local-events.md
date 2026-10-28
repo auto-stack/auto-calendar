@@ -1,12 +1,12 @@
 ---
 plan_id: CALENDAR-001
-status: executing
+status: reviewed
 feature_name: local-events
 author: [Codex]
 created_at: 2026-10-29
 updated_at: 2026-10-29
 plan_revision: 2
-current_step: 5
+current_step: 6
 total_steps: 7
 supersedes_spec_components: []
 new_spec_components: [docs/specs/calendar/basic-capabilities.md]
@@ -113,7 +113,8 @@ T-02..04按下列任务依赖顺序推进；T-05将本节拟议测试做成真�
 - [x] T-05（owner_stage=work；依赖 T-02..04；AC-01..04）：完成独立数据/失败回放和两端真实UI验收，新建 `tests/basic/verify_basic.py` 调度入口（可复用既有脚本），同时保存命令/输入hash/真实结果与原始失败；准备 canonical Spec 增量，提交实现，转 execution_done。（r2 终审 F-1 重开后闭合，见下方闭环记录）
   - [✅ 已完成-修复轮] F-1..F-7 闭环：F-1 每次运行独立临时数据目录（tempfile+清空，永久回放可重复——vue 19/19 连续两轮、vm 11/11 连续两轮实证）；F-2 driver 无 RESULTS 即 FAIL（driver-main/midnight-results 两项新增断言，19 项计数）；F-3 真实今日改 datetime.date.today() 动态断言；F-4 bin hash 全文件；F-5/F-6/F-7 spec 草稿与 capability-decision 措辞对齐（时钟重查时机=Init/Today、创建事实服务端生成+失败落零值说明、恢复 rev 回退限制注记）。产品代码零改动。证据 local-only：attachments/001/verify-{vue,vm}-*.json（修复后多轮）。
   - [✅ 已完成] `tests/basic/verify_basic.py`（`--profile vue|vm`）落地并双绿：vue 17/17、vm 11/11（当前源码、隔离数据目录、端口被占即失败）。覆盖 V-01 可控时钟（注入闰日 2028-02-29 渲染 + 跨午夜 2026-12-31→Today + 重开后回真实钟）、V-02 同日双事件+跨月事件+稳定 id（reopen 后 id 集不变）+双端表单创建逐字段核对、V-03 非法日期(2029-02-29)与倒置区间拒绝 + 表单输入逐字保留 + 无虚假事件。证据 JSON（含 auto bin hash 与逐项结果）local-only：attachments/001/verify-{vue,vm}-*.json；UI 驱动 tests/basic/vue_driver.mjs（仓内自有 playwright@1.63.0）。canonical Spec 增量草稿已备：docs/specs/calendar/basic-capabilities.md（SD-01/02，merge 复核后生效）；README 补运行/数据/验收入口。移除 calendar_util.at 死 use datetime（VM DIAG 噪音源）。统一回归门保持 pending（owner=最终复审/merge）。
-- [ ] T-06（owner_stage=review；依赖 T-05；AC-05）：在同一app检出暂停实现，按冻结提交、真实数据和独立反例最终复审；核对Spec增量与双端结果，说明上下文独立性限制；未满足返回修复，不将数据错误降为债务。
+- [x] T-06（owner_stage=review；依赖 T-05；AC-05）：在同一app检出暂停实现，按冻结提交、真实数据和独立反例最终复审；核对Spec增量与双端结果，说明上下文独立性限制；未满足返回修复，不将数据错误降为债务。
+  - [✅ 已完成] 独立子代理终审（两轮）：首轮 needs_fix（F-1..F-7，产品实现 10/10 反例全过）；bounded 修复 75ee52e（harness+文档措辞，产品代码零改动，路径级 diff 证明）；受影响范围复审 pass——F-1..F-7 逐项代码+执行双验证（vue 19/19×2、vm 11/11×2 连续复跑），产品侧 C-1..C-10/AC-01..03 证据因 diff 未触及而沿用。AC-05 达成；AC-06 归 merge。
 - [ ] T-07（owner_stage=merge；依赖 T-06；AC-06）：完成实际提交/推送/父仓gitlink验证，沉淀canonical Spec与derived ledger、归档；刷新总表A/B与证据，组合子模块显式detach，独立开发clone留在main。Linux仍等待发行版门，不因文档或脚本存在宣布已可用。
 
 ## 9. 复审记录
@@ -129,6 +130,7 @@ T-02..04按下列任务依赖顺序推进；T-05将本节拟议测试做成真�
 - stage: goal | plan_id: CALENDAR-001 | plan_revision: 2 | round: 1 | from: drafting | to: review | status: execution_done | outcome: pass | worktree: D:/autostack/auto-calendar（独立clone main，按计划§2） | commit: 49c44ac | next: review（授权链继续：review→bounded repair→merge）。
 - stage: review | review_scope: final | reviewer_identity: 独立 fresh 子代理上下文（general-purpose agent，同检出 5af0b6b，无实现会话记忆；限制：UI 证据经提交的 harness 驱动判定、Windows-only、executor 本地日志仅作背景） | plan_id: CALENDAR-001 | plan_revision: 2 | outcome: needs_fix | worktree_path: D:/autostack/auto-calendar | branch: main | reviewed_commit: 5af0b6b | base_commit: 6f4d36d（代码 diff 基线） | dependency_revisions: auto CLI 0.1.0+v0.0.20-117-g873fa23 | spec_inputs: docs/specs/calendar/basic-capabilities.md 草稿（附 capability-decision 冻结件） | acceptance_results: AC-01/02/03 pass（复审者 10/10 独立反例：零时长→inverted_range、13月/60分→invalid_start、世纪闰 1900无效/2000有效、跨月窗含、创建事实保留、conflict+rev回显、单文件损坏 corrupt_count=1、孤儿折叠恢复、多版本删除）；AC-04 实现过但入口 F-1 缺陷（as-is 复跑 16/17、9/11；清库 17/17、11/11）；AC-05=本复审；AC-06 pending（merge） | pending_closeout_gates: 统一回归门（merge 持有） | findings: F-1(medium,harness固定数据目录不可重复)；F-2(low,phase静默无RESULTS)；F-3(low,真实今日硬编码2026-10-29)；F-4(low,bin hash截断1MiB)；F-5(low,spec补恢复rev回退限制)；F-6(low,spec§2与capability-decision§3.2重查时机措辞过宽)；F-7(info,spec§2补时钟失败事实为零说明) | evidence: 复审者自有 harness 运行 verify-{vue,vm}-20261029-07*.json（local-only） | next: work（bounded 修复 F-1..F-7：harness+spec 措辞，不动产品语义）。
 - stage: work | plan_id: CALENDAR-001 | plan_revision: 2 | outcome: pass | worktree_path: D:/autostack/auto-calendar | branch: main | base_commit: eeb15b2 | code_commit: 见修复轮提交 | dependency_revisions: 同上 | task_ids: T-05(重开) | findings_closure: F-1→独立临时目录+双轮复跑过；F-2→driver-results断言；F-3→动态今日；F-4→全文件hash；F-5/F-6/F-7→文档措辞对齐（无产品语义变化，产品代码零改动） | evidence=修复后 verify harness 连续双轮：vue 19/19×2、vm 11/11×2（local-only verify-*.json） | blockers=无 | next_responsible_role=review（受影响范围复审）。
+- stage: review | review_scope: final（受影响范围复审） | reviewer_identity: 同一独立 fresh 子代理（延续首轮会话，跨轮记忆仅限其自有审查工件；限制同前：UI 证据经 harness 驱动、Windows-only） | plan_id: CALENDAR-001 | plan_revision: 2 | outcome: pass | worktree_path: D:/autostack/auto-calendar | branch: main | reviewed_commit: 75ee52e | base_commit: 5af0b6b（首轮终审基线） | dependency_revisions: auto CLI 0.1.0+v0.0.20-117-g873fa23（sha256 97ce3bde…全文件入证） | spec_inputs: docs/specs/calendar/basic-capabilities.md 草稿（F-5/6/7 措辞对齐后版本） | acceptance_results: AC-01..04 pass（首轮 C-1..C-10 沿用，路径级 diff 证明产品未变）；AC-05 pass（F-1..F-7 逐项闭环双验证 + 复审者自有 vue 19/19×2、vm 11/11×2 连续复跑）；AC-06 pending（merge） | pending_closeout_gates: 统一回归门（merge 持有） | findings: 无新增（两条非阻塞 polish：F-2 失败细节文案、临时目录不清理——系统temp、仓外） | evidence: verify-vue-20261029-074445/074841.json、verify-vm-20261029-075206/075554.json（local-only） | next: merge（T-07）。
 - 本次只改工作位置、跨仓链接与AC-06/T-07的检出收尾说明，不变更基础能力要求；独立clone开发，组合子模块只固定已交付版本。
 - 本轮核对源码/Spec缺口、历史任务、路径、基线和计划唯一性；未执行实现/功能测试，所有7项任务保持未勾选；通过的是草案结构/相互引用检查，不是产品验收。
 
