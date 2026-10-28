@@ -33,7 +33,7 @@ AutoOS 通过 [`apps/016-calendar`](https://github.com/auto-stack/auto-os/tree/v
 
 ## 基本能力补齐计划（2026-10-29）
 
-[CALENDAR-001：真实日期与本地事件日历](docs/plans/001-local-events.md) 为本app的基础能力执行合同，r2 已实施（execution_done 待复审）；基本能力规范见 [docs/specs/calendar/basic-capabilities.md](docs/specs/calendar/basic-capabilities.md)（merge 复核后生效）。
+[CALENDAR-001：真实日期与本地事件日历](docs/plans/archived/001-local-events.md) 为本app的基础能力执行合同，已交付（r2，复审通过并归档，2026-10-29）；基本能力规范见 [docs/specs/calendar/basic-capabilities.md](docs/specs/calendar/basic-capabilities.md)（已生效）。AutoOS 子模块 pin 更新与总表登记由 AutoOS 侧计划跟进。
 总状态与前置见 [AutoOS B类总跟踪表](https://github.com/auto-stack/auto-os/blob/main/docs/plans/b-apps-basic-capabilities.md)。基础能力通过后再考虑Linux；A类统一等待 auto-os-distro 完成 Nix＋COSMIC 基础，后续增强另会话。
 
 开发使用独立 clone `D:/autostack/auto-calendar` 的 main；AutoOS 内对应子模块仅固定已交付提交，流程见 [App开发与子模块](https://github.com/auto-stack/auto-os/blob/main/docs/design/strategy/app-submodule-workflow.md)。
