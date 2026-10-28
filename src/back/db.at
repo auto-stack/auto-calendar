@@ -1,120 +1,360 @@
-// CALENDAR-001 T-01 capability probe implementations (round 2).
-// Probes the real a2r backend surface this plan depends on: shell.exec host
-// clock (powershell invariant output), env override, fs round-trip.
-// Probe-only surface: T-02 replaces this file with the real service layer.
+// db.at — CALENDAR-001 v1 service layer (api.at endpoints ↔ same-name fns).
+//
+// Layers: api.at (routes+types) → db.at (service: clock/validation/envelopes)
+// → repository.at (storage protocol + pure date/time validation).
+// Typed results are built with `TypeName { ... }` literals assigned to a
+// local before return — `return TypeName { ... }` directly does not parse
+// (T-02 probe), and bare `{ ... }` does not transpile (T-01 probe).
+//
+// Clock: backend-authoritative (T-01 frozen model). host = shell.exec →
+// PowerShell emitting {"date","time","epoch","off"} json (invariant culture);
+// test mode (AUTO_CALENDAR_TEST_MODE=1) substitutes AUTO_CALENDAR_FAKE_DATE /
+// AUTO_CALENDAR_FAKE_TIME ("HH:mm") / AUTO_CALENDAR_FAKE_OFFSET_MIN (default
+// 0 = UTC, explicit test semantics) so both UI tracks verify against an
+// injected clock.
+//
+// a2r constraints honored (T-01/T-02 probes): no `use auto.shell` (broken
+// import emission — the qualified shell.exec call routes without it); no
+// json.is_valid (drift); no computed-index substr (i64/i32); no struct
+// literals in return position.
 
 use auto.env
 use auto.fs
 use auto.json
-// NOTE: `use auto.shell` emits a broken `use crate::shell;` import (use_stmt
-// remap gap); the qualified `shell.exec` call routes fine without it.
 
-// ─── data root (isolated override per plan §6 test isolation)
+use api: CalEvent
+use api: EventResult
+use api: EventsList
+use api: NowInfo
+use api: StoreStatus
 
-pub fn data_root() str {
-    var over str = env.get("AUTO_CALENDAR_DATA")
-    if over != "" {
-        return over
-    }
-    var base str = env.get("APPDATA")
-    if base != "" {
-        return base + "/auto-calendar"
-    }
-    var xdg str = env.get("XDG_DATA_HOME")
-    if xdg != "" {
-        return xdg + "/auto-calendar"
-    }
-    var home str = env.get("HOME")
-    if home != "" {
-        return home + "/.local/share/auto-calendar"
-    }
-    return "./auto-calendar-data"
+use repository
+
+// ─── limits (v1 contract, recorded in the Spec delta)
+
+fn title_ok(title str) bool {
+    var n int = title.len()
+    return n >= 1 && n <= 600
 }
 
-/// Host wall clock via powershell (invariant culture), pipe-joined:
-/// "YYYY-MM-DD HH:mm:ss|epoch_ms|offset_minutes".
-/// Named gap: embedded a2r_std facade lacks `time` (auto-lang owner); when
-/// closed this becomes time.* without contract change.
-pub fn host_now_parts() str {
-    var ps str = "powershell -NoProfile -EncodedCommand WwBEAGEAdABlAFQAaQBtAGUATwBmAGYAcwBlAHQAXQA6ADoATgBvAHcALgBUAG8AUwB0AHIAaQBuAGcAKAAnAHkAeQB5AHkALQBNAE0ALQBkAGQAIABIAEgAOgBtAG0AOgBzAHMAJwApACAAKwAgACcAfAAnACAAKwAgAFsARABhAHQAZQBUAGkAbQBlAE8AZgBmAHMAZQB0AF0AOgA6AE4AbwB3AC4AVABvAFUAbgBpAHgAVABpAG0AZQBNAGkAbABsAGkAcwBlAGMAbwBuAGQAcwAoACkAIAArACAAJwB8ACcAIAArACAAWwBUAGkAbQBlAFoAbwBuAGUASQBuAGYAbwBdADoAOgBMAG8AYwBhAGwALgBHAGUAdABVAHQAYwBPAGYAZgBzAGUAdAAoAFsARABhAHQAZQBUAGkAbQBlAE8AZgBmAHMAZQB0AF0AOgA6AE4AbwB3ACkALgBUAG8AdABhAGwATQBpAG4AdQB0AGUAcwAuAFQAbwBTAHQAcgBpAG4AZwAoACcAMAAnACkA"
-    var raw str = shell.exec(ps, 10000)
-    var env_var = json.parse(raw)
-    var code int = json.as_int(json.get(env_var, "exit_code"))
-    if code != 0 {
-        return "ERR:" + json.encode(code) + ":" + json.as_string(json.get(env_var, "stderr"))
-    }
-    return json.as_string(json.get(env_var, "stdout"))
+fn notes_ok(notes str) bool {
+    return notes.len() <= 4000
 }
+
+// ─── clock
 
 pub fn test_mode() bool {
     return env.get("AUTO_CALENDAR_TEST_MODE") == "1"
 }
 
-/// Fake-now override (test mode only): "YYYY-MM-DD HH:mm" [+ "|offset_min"].
-pub fn fake_now_parts() str {
-    var fake str = env.get("AUTO_CALENDAR_FAKE_NOW")
-    if fake == "" {
+fn now_err(err str) NowInfo {
+    var r1 NowInfo = NowInfo { ok: false, date: "", time: "", epoch_ms: "", offset_min: 0, source: "", err: err }
+    return r1
+}
+
+/// Real host clock: powershell invariant json — no .at-side string surgery.
+fn host_clock_json() str {
+    var ps str = "powershell -NoProfile -EncodedCommand JABuAD0AWwBEAGEAdABlAFQAaQBtAGUATwBmAGYAcwBlAHQAXQA6ADoATgBvAHcAOwAgAEAAewBkAGEAdABlAD0AJABuAC4AVABvAFMAdAByAGkAbgBnACgAJwB5AHkAeQB5AC0ATQBNAC0AZABkACcAKQA7ACAAdABpAG0AZQA9ACQAbgAuAFQAbwBTAHQAcgBpAG4AZwAoACcASABIADoAbQBtACcAKQA7ACAAZQBwAG8AYwBoAD0AWwBzAHQAcgBpAG4AZwBdACQAbgAuAFQAbwBVAG4AaQB4AFQAaQBtAGUATQBpAGwAbABpAHMAZQBjAG8AbgBkAHMAKAApADsAIABvAGYAZgA9AFsAVABpAG0AZQBaAG8AbgBlAEkAbgBmAG8AXQA6ADoATABvAGMAYQBsAC4ARwBlAHQAVQB0AGMATwBmAGYAcwBlAHQAKAAkAG4AKQAuAFQAbwB0AGEAbABNAGkAbgB1AHQAZQBzAH0AIAB8ACAAQwBvAG4AdgBlAHIAdABUAG8ALQBKAHMAbwBuACAALQBDAG8AbQBwAHIAZQBzAHMA"
+    var raw str = shell.exec(ps, 10000)
+    var env_var = json.parse(raw)
+    var code int = json.as_int(json.get(env_var, "exit_code"))
+    if code != 0 {
+        return ""
+    }
+    return json.as_string(json.get(env_var, "stdout")).trim()
+}
+
+/// Test-mode clock json from explicit date/time/offset env vars (no parsing).
+fn fake_clock_json() str {
+    var d str = env.get("AUTO_CALENDAR_FAKE_DATE")
+    var t str = env.get("AUTO_CALENDAR_FAKE_TIME")
+    if d == "" || t == "" {
         return ""
     }
     var off str = env.get("AUTO_CALENDAR_FAKE_OFFSET_MIN")
     if off == "" {
         off = "0"
     }
-    return fake + "|0|" + off
-}
-
-// ─── probe implementations
-
-pub fn probe_status() str {
-    var now_parts str = ""
-    if test_mode() {
-        now_parts = fake_now_parts()
-    }
-    if now_parts == "" {
-        now_parts = host_now_parts()
-    }
-    var s str = "{\"ok\":true,\"now_parts\":"
-    s = s + json.encode(now_parts)
-    s = s + ",\"data_dir\":"
-    s = s + json.encode(data_root())
-    s = s + ",\"test_mode\":"
-    if test_mode() {
-        s = s + "true"
-    } else {
-        s = s + "false"
-    }
+    var s str = "{\"date\":"
+    s = s + json.encode(d)
+    s = s + ",\"time\":"
+    s = s + json.encode(t)
+    s = s + ",\"epoch\":\"\",\"off\":"
+    // raw number (json.encode would quote it; as_int needs a numeric field)
+    s = s + off
     s = s + "}"
     return s
 }
 
-pub fn probe_fs() str {
-    var dir str = data_root()
-    var mk bool = fs.mkdir_all(dir)
-    var f str = dir + "/t01-probe.txt"
-    var w bool = fs.write_text(f, "t01-payload")
-    var rb str = fs.read_text(f)
-    var match_rb bool = rb == "t01-payload"
-    var fdel str = dir + "/t01-probe.txt"
-    var del bool = fs.delete(fdel)
-    var fchk str = dir + "/t01-probe.txt"
-    var still bool = fs.exists(fchk)
-    var ok_all bool = mk && w && match_rb && del && !still
-    var s str = "{\"ok\":"
-    if ok_all {
-        s = s + "true"
-    } else {
-        s = s + "false"
+/// GET /api/v1/now — the clock authority for both UI tracks.
+pub fn now() NowInfo {
+    var js str = ""
+    var source str = "host"
+    if test_mode() {
+        js = fake_clock_json()
+        source = "test"
     }
-    s = s + ",\"mkdir\":"
-    s = s + json.encode(mk)
-    s = s + ",\"write\":"
-    s = s + json.encode(w)
-    s = s + ",\"readback\":"
-    s = s + json.encode(rb)
-    s = s + ",\"deleted\":"
-    s = s + json.encode(del)
-    s = s + ",\"still_there\":"
-    s = s + json.encode(still)
+    if js == "" {
+        js = host_clock_json()
+        source = "host"
+    }
+    if js == "" || !repository.json_ok(js) {
+        return now_err("clock_unavailable")
+    }
+    var it = json.parse(js)
+    var date str = json.as_string(json.get(it, "date"))
+    var time str = json.as_string(json.get(it, "time"))
+    var epoch str = json.as_string(json.get(it, "epoch"))
+    var off int = json.as_int(json.get(it, "off"))
+    if !repository.is_valid_date(date) {
+        return now_err("clock_unavailable")
+    }
+    if !repository.valid_hhmm_at(time, 0) {
+        return now_err("clock_unavailable")
+    }
+    var r3 NowInfo = NowInfo { ok: true, date: date, time: time, epoch_ms: epoch, offset_min: off, source: source, err: "" }
+    return r3
+}
+
+// ─── test setup + status
+
+pub fn test_setup(data_dir str) str {
+    if !test_mode() {
+        return "{\"ok\":false,\"err_code\":\"test_mode_disabled\"}"
+    }
+    if data_dir == "" {
+        return "{\"ok\":false,\"err_code\":\"invalid_request\"}"
+    }
+    env.set("AUTO_CALENDAR_DATA", data_dir)
+    var s str = "{\"ok\":true,\"data_dir\":"
+    s = s + json.encode(data_dir)
     s = s + "}"
     return s
+}
+
+/// GET /api/v1/status
+pub fn status() StoreStatus {
+    var man str = repository.manifest_ensure()
+    if man == "" {
+        var r1 StoreStatus = StoreStatus { ok: false, data_dir: repository.data_root(), rev: 0, count: 0, corrupt_count: 0, test_mode: test_mode(), err: "storage_unwritable" }
+        return r1
+    }
+    var entries str = repository.manifest_entries(man)
+    var cnt int = repository.entries_count(entries)
+    var corrupt int = 0
+    var i int = 0
+    while i < cnt {
+        var doc str = repository.event_read(repository.entry_file(entries, i))
+        if doc == "" {
+            corrupt = corrupt + 1
+        }
+        i = i + 1
+    }
+    var r2 StoreStatus = StoreStatus { ok: true, data_dir: repository.data_root(), rev: repository.manifest_rev(man), count: cnt, corrupt_count: corrupt, test_mode: test_mode(), err: "" }
+    return r2
+}
+
+// ─── typed event helpers
+
+fn empty_event() CalEvent {
+    var r CalEvent = CalEvent { id: "", title: "", start: "", end: "", notes: "", created_offset_min: 0, created_epoch_ms: "" }
+    return r
+}
+
+fn cal_event_of(doc str) CalEvent {
+    var it = json.parse(doc)
+    var r CalEvent = CalEvent {
+        id: json.as_string(json.get(it, "id")),
+        title: json.as_string(json.get(it, "title")),
+        start: json.as_string(json.get(it, "start")),
+        end: json.as_string(json.get(it, "end")),
+        notes: json.as_string(json.get(it, "notes")),
+        created_offset_min: json.as_int(json.get(it, "created_offset_min")),
+        created_epoch_ms: json.as_string(json.get(it, "created_epoch_ms"))
+    }
+    return r
+}
+
+fn event_err(code str, rev int) EventResult {
+    var r EventResult = EventResult { ok: false, err_code: code, err_detail: "", rev: rev, event: empty_event() }
+    return r
+}
+
+fn ok_result(rev_new int, doc str) EventResult {
+    var r EventResult = EventResult { ok: true, err_code: "", err_detail: "", rev: rev_new, event: cal_event_of(doc) }
+    return r
+}
+
+fn find_entry(entries str, id str) int {
+    var cnt int = repository.entries_count(entries)
+    var i int = 0
+    while i < cnt {
+        if repository.entry_id(entries, i) == id {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+// ─── mutations
+
+/// POST /api/v1/events — create one single (non-recurring) event.
+pub fn event_create(title str, start str, end str, notes str) EventResult {
+    var man str = repository.manifest_ensure()
+    if man == "" {
+        return event_err("storage_unwritable", 0)
+    }
+    var rev_old int = repository.manifest_rev(man)
+    if !title_ok(title) {
+        return event_err("invalid_title", rev_old)
+    }
+    if !notes_ok(notes) {
+        return event_err("invalid_notes", rev_old)
+    }
+    if !repository.is_valid_datetime(start) {
+        return event_err("invalid_start", rev_old)
+    }
+    if !repository.is_valid_datetime(end) {
+        return event_err("invalid_end", rev_old)
+    }
+    if !repository.valid_range(start, end) {
+        return event_err("inverted_range", rev_old)
+    }
+    var seq int = repository.manifest_next_seq(man)
+    var id str = "ev-" + json.encode(seq)
+    var rev_new int = rev_old + 1
+    var clock = now()
+    var doc str = repository.event_doc_json(id, title, start, end, notes, clock.offset_min, clock.epoch_ms)
+    var wrote bool = repository.event_write(id, rev_new, doc)
+    if !wrote {
+        return event_err("storage_unwritable", rev_old)
+    }
+    var entries str = repository.manifest_entries(man)
+    var rebuilt str = repository.array_append(entries, repository.entry_json(id, repository.event_file_name(id, rev_new), rev_new))
+    var stored bool = repository.manifest_store(rev_new, seq + 1, rebuilt)
+    if !stored {
+        return event_err("storage_unwritable", rev_old)
+    }
+    return ok_result(rev_new, doc)
+}
+
+/// POST /api/v1/events/update — expected_rev is the global store revision
+/// the caller last saw; mismatch → "conflict" (never a silent overwrite).
+pub fn event_update(id str, expected_rev int, title str, start str, end str, notes str) EventResult {
+    var man str = repository.manifest_ensure()
+    if man == "" {
+        return event_err("storage_unwritable", 0)
+    }
+    var rev_old int = repository.manifest_rev(man)
+    if expected_rev != rev_old {
+        return event_err("conflict", rev_old)
+    }
+    if !title_ok(title) {
+        return event_err("invalid_title", rev_old)
+    }
+    if !notes_ok(notes) {
+        return event_err("invalid_notes", rev_old)
+    }
+    if !repository.is_valid_datetime(start) {
+        return event_err("invalid_start", rev_old)
+    }
+    if !repository.is_valid_datetime(end) {
+        return event_err("invalid_end", rev_old)
+    }
+    if !repository.valid_range(start, end) {
+        return event_err("inverted_range", rev_old)
+    }
+    var entries str = repository.manifest_entries(man)
+    var k int = find_entry(entries, id)
+    if k < 0 {
+        return event_err("not_found", rev_old)
+    }
+    var doc_old str = repository.event_read(repository.entry_file(entries, k))
+    if doc_old == "" {
+        return event_err("not_found", rev_old)
+    }
+    var old = cal_event_of(doc_old)
+    var rev_new int = rev_old + 1
+    var doc str = repository.event_doc_json(id, title, start, end, notes, old.created_offset_min, old.created_epoch_ms)
+    var wrote bool = repository.event_write(id, rev_new, doc)
+    if !wrote {
+        return event_err("storage_unwritable", rev_old)
+    }
+    var entries_new str = repository.array_with(entries, k, repository.entry_json(id, repository.event_file_name(id, rev_new), rev_new))
+    var stored bool = repository.manifest_store(rev_new, repository.manifest_next_seq(man), entries_new)
+    if !stored {
+        return event_err("storage_unwritable", rev_old)
+    }
+    return ok_result(rev_new, doc)
+}
+
+/// POST /api/v1/events/delete — removes the manifest entry and ALL revision
+/// files of the id so a later recovery cannot resurrect deleted data.
+pub fn event_delete(id str, expected_rev int) EventResult {
+    var man str = repository.manifest_ensure()
+    if man == "" {
+        return event_err("storage_unwritable", 0)
+    }
+    var rev_old int = repository.manifest_rev(man)
+    if expected_rev != rev_old {
+        return event_err("conflict", rev_old)
+    }
+    var entries str = repository.manifest_entries(man)
+    var k int = find_entry(entries, id)
+    if k < 0 {
+        return event_err("not_found", rev_old)
+    }
+    var removed bool = repository.event_delete_files(id)
+    if !removed {
+        return event_err("storage_unwritable", rev_old)
+    }
+    var rev_new int = rev_old + 1
+    var entries_new str = repository.array_without(entries, k)
+    var stored bool = repository.manifest_store(rev_new, repository.manifest_next_seq(man), entries_new)
+    if !stored {
+        return event_err("storage_unwritable", rev_old)
+    }
+    return ok_result(rev_new, "{}")
+}
+
+// ─── queries
+
+/// GET /api/v1/events?from_date&to_date — events whose
+/// [start.date, end.date] window intersects the inclusive range;
+/// corrupt/missing files are counted, not silently dropped from the tally.
+pub fn events_list(from_date str, to_date str) EventsList {
+    var none List<CalEvent> = List<CalEvent>.new([])
+    var man str = repository.manifest_ensure()
+    if man == "" {
+        var r1 EventsList = EventsList { ok: false, err_code: "storage_unwritable", rev: 0, count: 0, corrupt_count: 0, events: none }
+        return r1
+    }
+    if !repository.is_valid_date(from_date) {
+        var r2 EventsList = EventsList { ok: false, err_code: "invalid_request", rev: repository.manifest_rev(man), count: 0, corrupt_count: 0, events: none }
+        return r2
+    }
+    if !repository.is_valid_date(to_date) {
+        var r3 EventsList = EventsList { ok: false, err_code: "invalid_request", rev: repository.manifest_rev(man), count: 0, corrupt_count: 0, events: none }
+        return r3
+    }
+    var entries str = repository.manifest_entries(man)
+    var cnt int = repository.entries_count(entries)
+    var out List<CalEvent> = List<CalEvent>.new([])
+    var corrupt int = 0
+    var i int = 0
+    while i < cnt {
+        var doc str = repository.event_read(repository.entry_file(entries, i))
+        if doc == "" {
+            corrupt = corrupt + 1
+        } else {
+            var ev = cal_event_of(doc)
+            if repository.range_overlaps(ev.start, ev.end, from_date, to_date) {
+                out.push(ev)
+            }
+        }
+        i = i + 1
+    }
+    var r4 EventsList = EventsList { ok: true, err_code: "", rev: repository.manifest_rev(man), count: out.len(), corrupt_count: corrupt, events: out }
+    return r4
 }

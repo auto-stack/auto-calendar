@@ -55,13 +55,19 @@ v1 以「后端权威时钟 + 墙钟事件模型」冻结，不受缺口阻塞�
 
 1. **架构**：双端统一 split mode；后端 = a2r rust axum（pac.at `api:"rust"`），端口 17821；每数据目录单写者。
 2. **时间模型（后端权威时钟）**：`GET /api/v1/now` → `{date:"YYYY-MM-DD", time:"HH:mm", epoch_ms, offset_min, source:"host"|"test"}`；实现 = shell.exec PowerShell（不变文化输出，Windows；Linux 另等发行版门）。前端**不取本地时钟**：Init / Today / 月份导航 / 保存前后均重查 /now ⇒ 跨午夜、跨年、闰年由真实数据驱动，无固定日期残留（旧 `2026-06-17` 硬编码全部移除）。后端不可达 ⇒ 显式错误态，不显示假数据。
-3. **可控时钟（V-01）**：test mode 注入 `AUTO_CALENDAR_FAKE_NOW`（`YYYY-MM-DD HH:mm`）与可选 `AUTO_CALENDAR_FAKE_OFFSET_MIN`（缺省 0=UTC，测试语义显式记录）；双端同源注入。
+3. **可控时钟（V-01）**：test mode 注入 `AUTO_CALENDAR_FAKE_DATE`（`YYYY-MM-DD`）+ `AUTO_CALENDAR_FAKE_TIME`（`HH:mm`）+ 可选 `AUTO_CALENDAR_FAKE_OFFSET_MIN`（缺省 0=UTC，测试语义显式记录）——日期/时间分变量，杜绝注入值解析；双端同源注入。（T-02 修订：原单一 `AUTO_CALENDAR_FAKE_NOW` 需字符串切分，违反无 substr 约束。）
 4. **事件模型（单次事件）**：稳定 id `ev-<seq>`（后端单调）；字段 title / start / end（`YYYY-MM-DD HH:mm` 墙钟）/ notes / created_offset_min（创建时刻设备偏移）/ created_epoch_ms。**墙钟语义：不声明时刻（instant），不伪装完整时区**（满足计划 §2"不通过固定 UTC 偏移伪装完整时区"）。
 5. **校验（AC-03）**：后端纯 .at 校验——日历有效性（闰年/月日，datecalc 纯函数）、HH:mm 范围、end > start；非法输入返回结构化 err_code，前端保留原输入。**边界（诚实声明）**：DST 时刻歧义检测需 tz 数据库，当前后端不可达 ⇒ v1 墙钟输入不存在"歧义时刻"解释问题（存什么显什么，不静默改时刻）；instant 级歧义拒绝列为缺口 §4-1 的关闭红利，Spec 增量按此准确表述。
 6. **存储（AC-03 重启恢复）**：`<data_root>/store/events.r<N>.json` 版本快照 + `manifest.json {rev, file}` 提交点；写序 = 先 r 文件后 manifest；manifest 损坏恢复 = dir_names 取最高有效版本重写 manifest；根解析 = `AUTO_CALENDAR_DATA` → `%APPDATA%/auto-calendar` → XDG/HOME 兜底。
 7. **冲突模型**：变更携带 expected_rev；不匹配 → `err_code:"conflict"`，前端重取后由用户重试（不静默覆盖）。
-8. **模块布局**：`src/back/api.at`（类型+路由）、`db.at`（服务层，与 api 同名配对）、`events.at`（存储协议）、`datecalc.at`（纯校验）；伴随模块由 api_gen 一并转译。
+8. **模块布局（T-02 修订）**：`src/back/api.at`（类型+路由）、`db.at`（服务层，与 api 同名配对）、`repository.at`（存储协议+纯日期校验，合并原拟议 events.at/datecalc.at——生成器对 db.rs 伴随模块的借用修正硬编码模块名 `repository`，存储层必须落此名；合并同时消除跨模块 str 借用）。前端 calendar_util.at 保留自身月算法副本，语义一致性由 V-01 双端回放覆盖（Spec delta 记录）。
 9. **启动入口（T-05 记录进 README）**：Vue = `auto run`；VM = `auto run -r vm`；两者均需 17821 后端；测试先核端口空闲再启动。
+10. **T-02 补充约束（转译/生成层，写码时必须绕开）**：
+    - `return TypeName { … }` 不解析（E0201 误报 undefined variable）→ 一律 `var r T = T { … }` 后 `return r`；裸 `{ … }` 不转译（T-01）。
+    - `json.is_valid` stdlib/facade 签名漂移（int vs bool）→ `json_ok()`：`json.parse(s) != json.parse("null")`（notes 同款，损坏输入解析为 Null 不 panic）。
+    - 计算下标 `substr` 不可用（len() 产出 i64、str_substr 收 i32）→ 定位读取全走 char_at 循环 + starts_with/ends_with；数组操作用 parse-rebuild（repository.at array_build）。
+    - json 数值面：PowerShell 侧 off/epoch 需区分字符串（epoch 保持 [string]，13 位超 i32；off 必须为 JSON 数字，否则 as_int 得 0）。
+    - EncodedCommand 常量由脚本生成并经 cmd /C 回环验证后落码（手抄曾致 UTF-16 对齐损坏）。
 
 ## 4. 具名跨仓缺口（不在本计划内修）
 

@@ -1,0 +1,630 @@
+// repository.at — CALENDAR-001 v1 storage + pure date/time validation.
+//
+// Split note: this module merges the originally drafted events.at (storage
+// protocol) and datecalc.at (pure validation). The api generator's borrow
+// fixup for db.rs companion calls is hardcoded to the module name
+// "repository" (auto-api-gen), so the storage layer must live here; merging
+// the validators avoids cross-module str borrows entirely.
+//
+// Layout under the isolated data root (AUTO_CALENDAR_DATA → %APPDATA%/auto-calendar):
+//   <root>/store/manifest.json   {"schema_version":1,"rev":N,"next_seq":M,
+//                                 "events":[{"id":"ev-1","file":"ev-1.r000001.json","rev":1},...]}
+//   <root>/store/events/ev-<seq>.r<rev 6-digit>.json   immutable per-revision event file
+//
+// Commit protocol (no fs.rename in the embedded facade — capability-decision §2.2):
+//   1. write the new immutable event file (never modified again),
+//   2. rewrite manifest.json (the commit point).
+// Crash windows: an incomplete event file is not in the manifest; a crash
+// between 1 and 2 leaves an orphan revision file that recovery FOLDS IN
+// (data-preserving bias — losing a saved event is worse than resurfacing one).
+// Corrupt/missing manifest recovery: scan events/ via fs.dir_names (sorted),
+// keep the highest revision per id — zero-padded revisions keep file order
+// numeric — and rewrite the manifest.
+//
+// Conflict model: mutations carry expected_rev (global store revision);
+// mismatch → "conflict".
+//
+// a2r constraints honored here (T-01/T-02 probes): no json.is_valid
+// (signature drift — json_ok() instead), no computed-index substr (len() is
+// i64, str_substr takes i32) — positional reads go through char_at loops,
+// prefix checks through starts_with.
+
+use auto.env
+use auto.fs
+use auto.json
+
+// ═══════════════════════════════════════════════════════════
+// Pure date/time validation (wall-clock contract, capability-decision §3)
+// ═══════════════════════════════════════════════════════════
+
+pub fn is_leap(year int) bool {
+    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+}
+
+pub fn days_in_month(year int, month int) int {
+    let dim [12]int = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    if month == 2 && is_leap(year) {
+        return 29
+    }
+    return dim[month - 1]
+}
+
+fn digit_at(s str, i int) bool {
+    var c int = s.char_at(i)
+    return c >= 48 && c <= 57
+}
+
+fn digits_at(s str, from int, count int) bool {
+    var i int = 0
+    while i < count {
+        if !digit_at(s, from + i) {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+fn int_at(s str, from int, count int) int {
+    var acc int = 0
+    var i int = 0
+    while i < count {
+        acc = acc * 10 + (s.char_at(from + i) - 48)
+        i = i + 1
+    }
+    return acc
+}
+
+/// "YYYY-MM-DD" read at byte offset `at` inside s (fixed-format positions).
+pub fn valid_date_at(s str, at int) bool {
+    var n int = s.len()
+    if at < 0 {
+        return false
+    }
+    if at + 10 > n {
+        return false
+    }
+    if s.char_at(at + 4) != 45 {
+        return false
+    }
+    if s.char_at(at + 7) != 45 {
+        return false
+    }
+    if !digits_at(s, at, 4) {
+        return false
+    }
+    if !digits_at(s, at + 5, 2) {
+        return false
+    }
+    if !digits_at(s, at + 8, 2) {
+        return false
+    }
+    var month int = int_at(s, at + 5, 2)
+    if month < 1 {
+        return false
+    }
+    if month > 12 {
+        return false
+    }
+    var day int = int_at(s, at + 8, 2)
+    if day < 1 {
+        return false
+    }
+    var year int = int_at(s, at, 4)
+    return day <= days_in_month(year, month)
+}
+
+/// "HH:mm" at byte offset `at`.
+pub fn valid_hhmm_at(s str, at int) bool {
+    var n int = s.len()
+    if at < 0 {
+        return false
+    }
+    if at + 5 > n {
+        return false
+    }
+    if s.char_at(at + 2) != 58 {
+        return false
+    }
+    if !digits_at(s, at, 2) {
+        return false
+    }
+    if !digits_at(s, at + 3, 2) {
+        return false
+    }
+    var hh int = int_at(s, at, 2)
+    var mm int = int_at(s, at + 3, 2)
+    return hh <= 23 && mm <= 59
+}
+
+/// Full "YYYY-MM-DD" string check.
+pub fn is_valid_date(s str) bool {
+    if s.len() != 10 {
+        return false
+    }
+    return valid_date_at(s, 0)
+}
+
+/// Full "YYYY-MM-DD HH:mm" string check.
+pub fn is_valid_datetime(s str) bool {
+    var n int = s.len()
+    if n != 16 {
+        return false
+    }
+    if s.char_at(10) != 32 {
+        return false
+    }
+    return valid_date_at(s, 0) && valid_hhmm_at(s, 11)
+}
+
+/// Chronological a < b over count chars from `off` in each (fixed-format).
+fn less_at(a str, b str, off int, count int) bool {
+    var i int = 0
+    while i < count {
+        var ca int = a.char_at(off + i)
+        var cb int = b.char_at(off + i)
+        if ca < cb {
+            return true
+        }
+        if ca > cb {
+            return false
+        }
+        i = i + 1
+    }
+    return false
+}
+
+/// Chronological a < b on full "YYYY-MM-DD HH:mm" strings.
+pub fn datetime_lt(a str, b str) bool {
+    return less_at(a, b, 0, 16)
+}
+
+/// Inclusive date-range intersection: the event window
+/// [start.date, end.date] must overlap query [from_date, to_date].
+/// Date parts are compared positionally (chars 0..10), no slicing.
+pub fn range_overlaps(start str, end str, from_date str, to_date str) bool {
+    // NOT start.date > to_date
+    if less_at(to_date, start, 0, 10) {
+        return false
+    }
+    // NOT end.date < from_date
+    if less_at(end, from_date, 0, 10) {
+        return false
+    }
+    return true
+}
+
+/// Both endpoints valid datetimes and end strictly after start (AC-03:
+/// 起止倒置拒绝；start == end 同样拒绝 — 零时长不是有效单次事件区间).
+pub fn valid_range(start str, end str) bool {
+    if !is_valid_datetime(start) {
+        return false
+    }
+    if !is_valid_datetime(end) {
+        return false
+    }
+    return datetime_lt(start, end)
+}
+
+// ═══════════════════════════════════════════════════════════
+// Roots (T-01 frozen resolution order)
+// ═══════════════════════════════════════════════════════════
+
+pub fn data_root() str {
+    var over str = env.get("AUTO_CALENDAR_DATA")
+    if over != "" {
+        return over
+    }
+    var base str = env.get("APPDATA")
+    if base != "" {
+        return base + "/auto-calendar"
+    }
+    var xdg str = env.get("XDG_DATA_HOME")
+    if xdg != "" {
+        return xdg + "/auto-calendar"
+    }
+    var home str = env.get("HOME")
+    if home != "" {
+        return home + "/.local/share/auto-calendar"
+    }
+    return "./auto-calendar-data"
+}
+
+pub fn store_dir() str {
+    return data_root() + "/store"
+}
+
+pub fn events_dir() str {
+    return store_dir() + "/events"
+}
+
+pub fn manifest_path() str {
+    return store_dir() + "/manifest.json"
+}
+
+// ═══════════════════════════════════════════════════════════
+// Small builders (json facade is read-only; assembly via string concat)
+// ═══════════════════════════════════════════════════════════
+
+fn enc(s str) str {
+    return json.encode(s)
+}
+
+fn num(n int) str {
+    return json.encode(n)
+}
+
+/// json.is_valid has a stdlib/facade signature drift (int vs bool, T-02);
+/// notes-proven replacement: corrupt input parses to Null, no panic.
+pub fn json_ok(s str) bool {
+    return json.parse(s) != json.parse("null")
+}
+
+/// 6-digit zero-padded revision for file names (alphabetical == numeric).
+fn pad6(n int) str {
+    var s str = num(n)
+    while s.len() < 6 {
+        s = "0" + s
+    }
+    return s
+}
+
+pub fn event_file_name(id str, rev int) str {
+    return id + ".r" + pad6(rev) + ".json"
+}
+
+/// Entry object for one event inside the manifest events array.
+pub fn entry_json(id str, file str, rev int) str {
+    var s str = "{\"id\":"
+    s = s + enc(id)
+    s = s + ",\"file\":"
+    s = s + enc(file)
+    s = s + ",\"rev\":"
+    s = s + num(rev)
+    s = s + "}"
+    return s
+}
+
+/// Full manifest json from an already-assembled events ARRAY string.
+pub fn manifest_json(rev int, next_seq int, events_array str) str {
+    var s str = "{\"schema_version\":1,\"rev\":"
+    s = s + num(rev)
+    s = s + ",\"next_seq\":"
+    s = s + num(next_seq)
+    s = s + ",\"events\":"
+    s = s + events_array
+    s = s + "}"
+    return s
+}
+
+/// Event document for ev-<seq>.r<rev>.json. created_offset_min /
+/// created_epoch_ms are creation-time facts, preserved across updates.
+pub fn event_doc_json(id str, title str, start str, end str, notes str, off_min int, epoch_ms str) str {
+    var s str = "{\"schema_version\":1,\"id\":"
+    s = s + enc(id)
+    s = s + ",\"title\":"
+    s = s + enc(title)
+    s = s + ",\"start\":"
+    s = s + enc(start)
+    s = s + ",\"end\":"
+    s = s + enc(end)
+    s = s + ",\"notes\":"
+    s = s + enc(notes)
+    s = s + ",\"created_offset_min\":"
+    s = s + num(off_min)
+    s = s + ",\"created_epoch_ms\":"
+    s = s + enc(epoch_ms)
+    s = s + "}"
+    return s
+}
+
+/// Encoded-array builder core: re-encode elements of an encoded array,
+/// replacing index k with swap_json (k < 0 = plain append). No slicing
+/// anywhere (computed-index substr breaks on the i64/i32 facade boundary).
+fn array_build(array_json str, k int, swap_json str) str {
+    var arr = json.parse(array_json)
+    var cnt int = json.len(arr)
+    var out str = ""
+    var i int = 0
+    while i < cnt {
+        if i == k {
+            if out == "" {
+                out = "[" + swap_json
+            } else {
+                out = out + "," + swap_json
+            }
+        } else {
+            var enc_i str = json.encode(json.get_at(arr, i))
+            if out == "" {
+                out = "[" + enc_i
+            } else {
+                out = out + "," + enc_i
+            }
+        }
+        i = i + 1
+    }
+    if k < 0 || k >= cnt {
+        // plain append (or out-of-range replacement index → append)
+        if out == "" {
+            return "[" + swap_json + "]"
+        }
+        return out + "," + swap_json + "]"
+    }
+    return out + "]"
+}
+
+/// Append one encoded element to an encoded json array.
+pub fn array_append(array_json str, elem_json str) str {
+    return array_build(array_json, -1, elem_json)
+}
+
+/// Rebuild an encoded json array with element k replaced by elem_json.
+pub fn array_with(array_json str, k int, elem_json str) str {
+    return array_build(array_json, k, elem_json)
+}
+
+/// Rebuild an encoded json array without element k.
+pub fn array_without(array_json str, k int) str {
+    var arr = json.parse(array_json)
+    var cnt int = json.len(arr)
+    var out str = ""
+    var i int = 0
+    while i < cnt {
+        if i != k {
+            var enc_i str = json.encode(json.get_at(arr, i))
+            if out == "" {
+                out = "[" + enc_i
+            } else {
+                out = out + "," + enc_i
+            }
+        }
+        i = i + 1
+    }
+    if out == "" {
+        return "[]"
+    }
+    return out + "]"
+}
+
+// ═══════════════════════════════════════════════════════════
+// Manifest lifecycle
+// ═══════════════════════════════════════════════════════════
+
+/// Raw manifest string; "" when missing or unreadable/corrupt.
+pub fn manifest_load() str {
+    var p str = manifest_path()
+    if !fs.exists(p) {
+        return ""
+    }
+    var raw str = fs.read_text(p)
+    if !json_ok(raw) {
+        return ""
+    }
+    var it = json.parse(raw)
+    var rev int = json.as_int(json.get(it, "rev"))
+    var seq int = json.as_int(json.get(it, "next_seq"))
+    if rev < 0 {
+        return ""
+    }
+    if seq < 1 {
+        return ""
+    }
+    return raw
+}
+
+pub fn manifest_rev(man str) int {
+    var it = json.parse(man)
+    return json.as_int(json.get(it, "rev"))
+}
+
+pub fn manifest_next_seq(man str) int {
+    var it = json.parse(man)
+    var seq int = json.as_int(json.get(it, "next_seq"))
+    if seq < 1 {
+        return 1
+    }
+    return seq
+}
+
+pub fn manifest_entries(man str) str {
+    var it = json.parse(man)
+    return json.encode(json.get(it, "events"))
+}
+
+/// Commit the manifest (truncate+write of the small commit point).
+pub fn manifest_store(rev int, next_seq int, events_array str) bool {
+    var mk bool = fs.mkdir_all(events_dir())
+    if !mk {
+        return false
+    }
+    return fs.write_text(manifest_path(), manifest_json(rev, next_seq, events_array))
+}
+
+/// "ev-17" → 17 (0 on malformed).
+pub fn id_seq(id str) int {
+    if !id.starts_with("ev-") {
+        return 0
+    }
+    var n int = id.len()
+    if n < 4 {
+        return 0
+    }
+    // digits are chars 3..n
+    var i int = 3
+    while i < n {
+        if !digit_at(id, i) {
+            return 0
+        }
+        i = i + 1
+    }
+    return int_at(id, 3, n - 3)
+}
+
+/// Numeric rev from "ev-1.r000012.json" (0 on malformed). The 6-digit rev
+/// sits at n-11..n-5; ".json" occupies the last 5 bytes.
+pub fn file_rev(name str) int {
+    var n int = name.len()
+    if n < 13 {
+        return 0
+    }
+    if !name.ends_with(".json") {
+        return 0
+    }
+    if !digits_at(name, n - 11, 6) {
+        return 0
+    }
+    return int_at(name, n - 11, 6)
+}
+
+/// Scan events/ and rebuild the manifest from complete files: per id the
+/// highest revision wins (dir_names is sorted; revisions are zero-padded).
+/// Returns the recovered manifest string, "" when the store is unrecoverable.
+pub fn manifest_recover() str {
+    var mk bool = fs.mkdir_all(events_dir())
+    if !mk {
+        return ""
+    }
+    var names List<str> = fs.dir_names(events_dir())
+    var n int = names.len()
+    var entries str = "[]"
+    var max_seq int = 0
+    var max_rev int = 0
+    var i int = 0
+    while i < n {
+        var name str = names[i]
+        var rev int = file_rev(name)
+        if rev > 0 {
+            var raw str = fs.read_text(events_dir() + "/" + name)
+            if json_ok(raw) {
+                var it = json.parse(raw)
+                var id str = json.as_string(json.get(it, "id"))
+                if id != "" {
+                    var seq int = id_seq(id)
+                    if seq > max_seq {
+                        max_seq = seq
+                    }
+                    if rev > max_rev {
+                        max_rev = rev
+                    }
+                    var k int = entry_find(entries, id)
+                    if k >= 0 {
+                        if rev > entry_rev(entries, k) {
+                            entries = array_with(entries, k, entry_json(id, name, rev))
+                        }
+                    } else {
+                        entries = array_append(entries, entry_json(id, name, rev))
+                    }
+                }
+            }
+        }
+        i = i + 1
+    }
+    var man str = manifest_json(max_rev, max_seq + 1, entries)
+    if !fs.write_text(manifest_path(), man) {
+        return ""
+    }
+    return man
+}
+
+fn entry_find(entries str, id str) int {
+    var arr = json.parse(entries)
+    var cnt int = json.len(arr)
+    var i int = 0
+    while i < cnt {
+        var cur = json.get_at(arr, i)
+        if json.as_string(json.get(cur, "id")) == id {
+            return i
+        }
+        i = i + 1
+    }
+    return -1
+}
+
+/// Current manifest, recovering (or starting fresh) when missing/corrupt.
+/// "" when the store is unwritable.
+pub fn manifest_ensure() str {
+    var man str = manifest_load()
+    if man != "" {
+        return man
+    }
+    var recovered str = manifest_recover()
+    if recovered != "" {
+        return recovered
+    }
+    var fresh bool = manifest_store(0, 1, "[]")
+    if !fresh {
+        return ""
+    }
+    return manifest_load()
+}
+
+// ═══════════════════════════════════════════════════════════
+// Event file access
+// ═══════════════════════════════════════════════════════════
+
+/// Raw event json by manifest entry; "" when missing/corrupt.
+pub fn event_read(file str) str {
+    var p str = events_dir() + "/" + file
+    if !fs.exists(p) {
+        return ""
+    }
+    var raw str = fs.read_text(p)
+    if !json_ok(raw) {
+        return ""
+    }
+    return raw
+}
+
+pub fn event_write(id str, rev int, event_json str) bool {
+    var mk bool = fs.mkdir_all(events_dir())
+    if !mk {
+        return false
+    }
+    return fs.write_text(events_dir() + "/" + event_file_name(id, rev), event_json)
+}
+
+/// Delete every revision file of id (prefix "<id>.r") so recovery cannot
+/// resurrect deleted data. Returns false when any delete failed.
+pub fn event_delete_files(id str) bool {
+    var names List<str> = fs.dir_names(events_dir())
+    var n int = names.len()
+    var prefix str = id + ".r"
+    var i int = 0
+    while i < n {
+        var name str = names[i]
+        if name.starts_with(prefix) {
+            var fdel str = events_dir() + "/" + name
+            if !fs.delete(fdel) {
+                return false
+            }
+        }
+        i = i + 1
+    }
+    return true
+}
+
+pub fn entries_count(entries str) int {
+    if entries == "" {
+        return 0
+    }
+    var arr = json.parse(entries)
+    return json.len(arr)
+}
+
+pub fn entry_id(entries str, k int) str {
+    var arr = json.parse(entries)
+    var it = json.get_at(arr, k)
+    return json.as_string(json.get(it, "id"))
+}
+
+pub fn entry_file(entries str, k int) str {
+    var arr = json.parse(entries)
+    var it = json.get_at(arr, k)
+    return json.as_string(json.get(it, "file"))
+}
+
+pub fn entry_rev(entries str, k int) int {
+    var arr = json.parse(entries)
+    var it = json.get_at(arr, k)
+    return json.as_int(json.get(it, "rev"))
+}

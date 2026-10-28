@@ -6,7 +6,7 @@ author: [Codex]
 created_at: 2026-10-29
 updated_at: 2026-10-29
 plan_revision: 2
-current_step: 1
+current_step: 2
 total_steps: 7
 supersedes_spec_components: []
 new_spec_components: [docs/specs/calendar/basic-capabilities.md]
@@ -104,7 +104,8 @@ T-02..04按下列任务依赖顺序推进；T-05将本节拟议测试做成真�
 
 - [x] T-01（owner_stage=work；依赖 无；AC-01..04）：基线与全路径探针：验证真实本地日期（跨午夜/月份/闰年）、日期/时区可用 API、持久化与两端输入；冻结单次事件的精确时间模型。若需后端，17821 为候选并先核 manifest 无冲突；缺能力先具名立前置，不用写死日期替代。 输出新文件 `docs/plans/evidence/001/capability-decision.md`，记录可用API、版本/资源边界、缺项owner和最小闭环。
   - [✅ 已完成] 探针全绿（2026-10-29）：双端 split mode（vue/vm ↔ rust axum:17821）跑通；后端真实墙钟经 shell.exec→PowerShell（时间+epoch+偏移分钟）；可控时钟 AUTO_CALENDAR_TEST_MODE/FAKE_NOW 注入双端可用；AUTO_CALENDAR_DATA 隔离目录 fs 回环通过；基线复核 6f4d36d→c1e5c56 仅计划文档、源 hash 与 §4 一致。缺项具名：内嵌 facade 无 time 模块、后端无 chrono/tz（owner auto-lang，见决策文件 §4）；时间模型冻结为「后端权威时钟 + 墙钟事件」（决策文件 §3）。证据：docs/plans/evidence/001/capability-decision.md（原始日志 attachments/001/*.log 本地留存）。
-- [ ] T-02（owner_stage=work；依赖 T-01；AC-01..04）：事件模型与存储：新增事件模块和仓储（拟议 src/back/events.at / repository.at / api.at）；新增隔离数据目录与版本化空库；持久保存真实单次事件。
+- [x] T-02（owner_stage=work；依赖 T-01；AC-01..04）：事件模型与存储：新增事件模块和仓储（拟议 src/back/events.at / repository.at / api.at）；新增隔离数据目录与版本化空库；持久保存真实单次事件。
+  - [✅ 已完成] 交付 `src/back/{api,db,repository}.at`（模块调整：events.at+datecalc.at 合并入 repository.at——生成器对 db.rs 伴随模块借用修正硬编码 `repository` 名；证据=capability-decision §3.8）。HTTP 级验证全过（真实生成后端，隔离数据目录）：创建中文/跨年/闰日事件 ✓；拒绝 2029-02-29、25:00（invalid_start）、起止倒置（inverted_range）、空标题（invalid_title）✓；范围检索归属正确 ✓；expected_rev 冲突拒绝 ✓；更新保留创建时区/epoch ✓；删除连版本文件清除 ✓；硬杀重启后事件在（rev/ids 不变）✓；manifest 损坏→按文件重建（数据保全倾向）✓；可控时钟 date/time/offset 注入 ✓（rev 5 峰值，日志 attachments/001/run-t02-r*.log 本地）。
 - [ ] T-03（owner_stage=work；依赖 T-02；AC-01..04）：日历与事件行为：沿 calendar_util.at 的月份算法接真实今日，完成日期范围检索、事件创建/改动/删除，跨月事件归属按时间模型显示。
 - [ ] T-04（owner_stage=work；依赖 T-03；AC-01..04）：界面与真实日期：扩展 calendar_store.at / app.at 的事件列表与编辑表单；月导航保留，Today 使用实际本地日期；失败保留表单，不显示虚假保存。
 - [ ] T-05（owner_stage=work；依赖 T-02..04；AC-01..04）：完成独立数据/失败回放和两端真实UI验收，新建 `tests/basic/verify_basic.py` 调度入口（可复用既有脚本），同时保存命令/输入hash/真实结果与原始失败；准备 canonical Spec 增量，提交实现，转 execution_done。
@@ -117,6 +118,7 @@ T-02..04按下列任务依赖顺序推进；T-05将本节拟议测试做成真�
 - stage: new | plan_id: CALENDAR-001 | plan_revision: 2 | outcome: pass（独立clone路径修订就绪；功能未实施/未验收） | next: work/T-01（另行执行）。
 - stage: goal | plan_id: CALENDAR-001 | plan_revision: 2 | round: 1 | from: drafting | to: work | status: drafting→executing | outcome: pass | worktree: D:/autostack/auto-calendar（独立clone，main，按计划§2覆盖默认worktree规约） | commit: （T-01提交见下） | next: work（授权链：用户 /goal 经 auto-plan-goal 一线授权 work→review→bounded repair→merge）。
 - stage: work | plan_id: CALENDAR-001 | plan_revision: 2 | outcome: pass | worktree_path: D:/autostack/auto-calendar | branch: main | base_commit: c1e5c56 | code_commit: 见T-01提交 | dependency_revisions: auto CLI 0.1.0+v0.0.20-117-g873fa23（auto-man e6cc06f build）；auto-lang a748017da（只读依据） | task_ids: T-01 | evidence=docs/plans/evidence/001/capability-decision.md（探针：双端split mode、后端真实墙钟shell.exec/PowerShell、可控时钟注入、隔离目录fs回环全过；缺项time facade/chrono/tz具名归auto-lang） | blockers=无 | next_responsible_role=work（T-02）。
+- stage: work | plan_id: CALENDAR-001 | plan_revision: 2 | outcome: pass | worktree_path: D:/autostack/auto-calendar | branch: main | base_commit: 1f457e3 | code_commit: 见T-02提交 | dependency_revisions: 同上 | task_ids: T-02 | evidence=src/back/{api,db,repository}.at + capability-decision §3.8/§3.10（HTTP级电池：创建/拒绝/范围/冲突/更新保留/删除清理/重启持久/损坏恢复/可控时钟全过，日志 attachments/001/run-t02-r*.log） | blockers=无（转译层约束已固化为写码规则，见决策文件 §3.10） | next_responsible_role=work（T-03）。
 - 本次只改工作位置、跨仓链接与AC-06/T-07的检出收尾说明，不变更基础能力要求；独立clone开发，组合子模块只固定已交付版本。
 - 本轮核对源码/Spec缺口、历史任务、路径、基线和计划唯一性；未执行实现/功能测试，所有7项任务保持未勾选；通过的是草案结构/相互引用检查，不是产品验收。
 

@@ -16,3 +16,6 @@ __pycache__/
 /tmp/
 /test-results/
 /playwright-report/
+
+# transpile sidecars (auto trans / api_gen)
+*.a2r.rs.assembly.json

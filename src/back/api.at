@@ -1,20 +1,107 @@
-// CALENDAR-001 T-01 capability probe endpoints (round 2).
-// Probes: shell.exec host clock (powershell), env override, fs round-trip.
-// Round-1 negative evidence (kept in capability-decision.md): embedded
-// a2r_std facade has no `time` module (E0433); api_gen workspace has no
-// chrono dep (use.rs import unresolved); struct-literal returns invalid.
-// Probe-only surface: T-02 replaces this file with the real events contract.
+// api.at — CALENDAR-001 v1 contract types + HTTP routes.
+//
+// Data model (single non-recurring events, wall-clock semantics — see
+// docs/plans/evidence/001/capability-decision.md §3):
+//   start/end   "YYYY-MM-DD HH:mm", end strictly after start
+//   created_offset_min / created_epoch_ms   creation-time host clock facts,
+//                                           preserved across updates
+// Types use the api.at `pub type = { ... }` style (Vec + serde derive).
 
-// ─── Probe endpoints (all return str: hand-built JSON, proven notes pattern)
-
-/// Host clock + data dir + test-mode flag.
-#[api(method = "GET", path = "/api/v1/probe/status")]
-pub fn probe_status() str {
-    return db.probe_status()
+pub type NowInfo = {
+    ok: bool
+    date: str
+    time: str
+    epoch_ms: str
+    offset_min: int
+    source: str
+    err: str
 }
 
-/// fs round-trip inside the isolated data dir (AUTO_CALENDAR_DATA override).
-#[api(method = "GET", path = "/api/v1/probe/fs")]
-pub fn probe_fs() str {
-    return db.probe_fs()
+pub type CalEvent = {
+    id: str
+    title: str
+    start: str
+    end: str
+    notes: str
+    created_offset_min: int
+    created_epoch_ms: str
+}
+
+pub type EventResult = {
+    ok: bool
+    err_code: str
+    err_detail: str
+    rev: int
+    event: CalEvent
+}
+
+pub type EventsList = {
+    ok: bool
+    err_code: str
+    rev: int
+    count: int
+    corrupt_count: int
+    events: []CalEvent
+}
+
+pub type StoreStatus = {
+    ok: bool
+    data_dir: str
+    rev: int
+    count: int
+    corrupt_count: int
+    test_mode: bool
+    err: str
+}
+
+// ═══════════════════════════════════════════════════════════
+// Endpoints (service layer = same-name fns in db.at)
+// ═══════════════════════════════════════════════════════════
+
+use db
+
+/// Clock authority: real host local date/time (or test-mode injection).
+#[api(method = "GET", path = "/api/v1/now")]
+pub fn now() NowInfo {
+    return db.now()
+}
+
+/// Store diagnostics: revision, counts, isolated data dir, test-mode flag.
+#[api(method = "GET", path = "/api/v1/status")]
+pub fn status() StoreStatus {
+    return db.status()
+}
+
+/// Events intersecting the inclusive date range [from, to] (YYYY-MM-DD).
+#[api(method = "GET", path = "/api/v1/events")]
+pub fn events_list(from_date str, to_date str) EventsList {
+    return db.events_list(from_date, to_date)
+}
+
+/// Create one single (non-recurring) event; rejects invalid dates/times,
+/// inverted ranges, empty titles. Structured err_code on failure.
+#[api(method = "POST", path = "/api/v1/events")]
+pub fn event_create(title str, start str, end str, notes str) EventResult {
+    return db.event_create(title, start, end, notes)
+}
+
+/// Update by id; expected_rev must match the store revision the caller saw
+/// (mismatch → "conflict", never a silent overwrite). Creation facts survive.
+#[api(method = "POST", path = "/api/v1/events/update")]
+pub fn event_update(id str, expected_rev int, title str, start str, end str, notes str) EventResult {
+    return db.event_update(id, expected_rev, title, start, end, notes)
+}
+
+/// Delete by id; removes every revision file of the id (no resurrection on
+/// recovery). expected_rev semantics as in update.
+#[api(method = "POST", path = "/api/v1/events/delete")]
+pub fn event_delete(id str, expected_rev int) EventResult {
+    return db.event_delete(id, expected_rev)
+}
+
+/// Test-only: switch the isolated data root in-process. Requires
+/// AUTO_CALENDAR_TEST_MODE=1; returns a hand-built json envelope.
+#[api(method = "POST", path = "/api/v1/test/setup")]
+pub fn test_setup(data_dir str) str {
+    return db.test_setup(data_dir)
 }
