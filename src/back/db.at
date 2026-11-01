@@ -119,6 +119,18 @@ pub fn now() NowInfo {
 
 // ─── test setup + status
 
+/// Bring the store to a usable state ("ok" | "unproven" | "" = unwritable).
+/// In the unproven state mutations refuse with recovery_unproven
+/// (recovery-decision §4.3D); reads degrade to the best-effort scan view.
+fn recover_state() str {
+    return repository.store_recover()
+}
+
+/// Scan-view json for the unproven read path; "" when unwritable.
+fn unproven_view() str {
+    return repository.scan_view("[]")
+}
+
 pub fn test_setup(data_dir str) str {
     if !test_mode() {
         return "{\"ok\":false,\"err_code\":\"test_mode_disabled\"}"
@@ -135,23 +147,40 @@ pub fn test_setup(data_dir str) str {
 
 /// GET /api/v1/status
 pub fn status() StoreStatus {
-    var man str = repository.manifest_ensure()
-    if man == "" {
-        var r1 StoreStatus = StoreStatus { ok: false, data_dir: repository.data_root(), rev: 0, count: 0, corrupt_count: 0, test_mode: test_mode(), err: "storage_unwritable" }
+    var state str = recover_state()
+    if state == "unproven" {
+        // evidence insufficient: read-only diagnosis view, writes refused
+        var scan str = unproven_view()
+        var cnt int = 0
+        var corrupt int = 0
+        var rev int = 0
+        if scan != "" {
+            var sv = json.parse(scan)
+            cnt = json.len(json.get(sv, "entries"))
+            corrupt = json.as_int(json.get(sv, "corrupt"))
+            rev = json.as_int(json.get(sv, "max_rev"))
+        }
+        var r0 StoreStatus = StoreStatus { ok: true, data_dir: repository.data_root(), rev: rev, count: cnt, corrupt_count: corrupt, test_mode: test_mode(), recovery_state: "unproven", generation: "", err: "" }
+        return r0
+    }
+    var man str = repository.manifest_load()
+    if state == "" || man == "" {
+        var r1 StoreStatus = StoreStatus { ok: false, data_dir: repository.data_root(), rev: 0, count: 0, corrupt_count: 0, test_mode: test_mode(), recovery_state: "", generation: "", err: "storage_unwritable" }
         return r1
     }
+    var ident str = repository.identity_load()
     var entries str = repository.manifest_entries(man)
-    var cnt int = repository.entries_count(entries)
-    var corrupt int = 0
+    var cnt2 int = repository.entries_count(entries)
+    var corrupt2 int = 0
     var i int = 0
-    while i < cnt {
+    while i < cnt2 {
         var doc str = repository.event_read(repository.entry_file(entries, i))
         if doc == "" {
-            corrupt = corrupt + 1
+            corrupt2 = corrupt2 + 1
         }
         i = i + 1
     }
-    var r2 StoreStatus = StoreStatus { ok: true, data_dir: repository.data_root(), rev: repository.manifest_rev(man), count: cnt, corrupt_count: corrupt, test_mode: test_mode(), err: "" }
+    var r2 StoreStatus = StoreStatus { ok: true, data_dir: repository.data_root(), rev: repository.manifest_rev(man), count: cnt2, corrupt_count: corrupt2, test_mode: test_mode(), recovery_state: "ok", generation: repository.identity_generation(ident), err: "" }
     return r2
 }
 
@@ -205,9 +234,15 @@ fn find_entry(entries str, id str) int {
 // ─── mutations
 
 /// POST /api/v1/events — create one single (non-recurring) event.
+/// Commit order (recovery-decision §4.2): ① event file → ② identity
+/// watermark (credential commit point) → ③ manifest (visibility).
 pub fn event_create(title str, start str, end str, notes str) EventResult {
-    var man str = repository.manifest_ensure()
-    if man == "" {
+    var state str = recover_state()
+    if state == "unproven" {
+        return event_err("recovery_unproven", 0)
+    }
+    var man str = repository.manifest_load()
+    if state == "" || man == "" {
         return event_err("storage_unwritable", 0)
     }
     var rev_old int = repository.manifest_rev(man)
@@ -235,6 +270,13 @@ pub fn event_create(title str, start str, end str, notes str) EventResult {
     if !wrote {
         return event_err("storage_unwritable", rev_old)
     }
+    var ident str = repository.identity_load()
+    var gen str = repository.identity_generation(ident)
+    var tombs str = repository.identity_tombstones(ident)
+    var cred bool = repository.identity_store(gen, rev_new, seq, tombs)
+    if !cred {
+        return event_err("storage_unwritable", rev_old)
+    }
     var entries str = repository.manifest_entries(man)
     var rebuilt str = repository.array_append(entries, repository.entry_json(id, repository.event_file_name(id, rev_new), rev_new))
     var stored bool = repository.manifest_store(rev_new, seq + 1, rebuilt)
@@ -246,9 +288,15 @@ pub fn event_create(title str, start str, end str, notes str) EventResult {
 
 /// POST /api/v1/events/update — expected_rev is the global store revision
 /// the caller last saw; mismatch → "conflict" (never a silent overwrite).
+/// The revision is watermark-backed: a recovery can never revalidate an
+/// old credential (CALENDAR-002 closes the F-5 ABA window).
 pub fn event_update(id str, expected_rev int, title str, start str, end str, notes str) EventResult {
-    var man str = repository.manifest_ensure()
-    if man == "" {
+    var state str = recover_state()
+    if state == "unproven" {
+        return event_err("recovery_unproven", 0)
+    }
+    var man str = repository.manifest_load()
+    if state == "" || man == "" {
         return event_err("storage_unwritable", 0)
     }
     var rev_old int = repository.manifest_rev(man)
@@ -286,6 +334,13 @@ pub fn event_update(id str, expected_rev int, title str, start str, end str, not
     if !wrote {
         return event_err("storage_unwritable", rev_old)
     }
+    var ident str = repository.identity_load()
+    var gen str = repository.identity_generation(ident)
+    var tombs str = repository.identity_tombstones(ident)
+    var cred bool = repository.identity_store(gen, rev_new, repository.identity_seq_high(ident), tombs)
+    if !cred {
+        return event_err("storage_unwritable", rev_old)
+    }
     var entries_new str = repository.array_with(entries, k, repository.entry_json(id, repository.event_file_name(id, rev_new), rev_new))
     var stored bool = repository.manifest_store(rev_new, repository.manifest_next_seq(man), entries_new)
     if !stored {
@@ -294,11 +349,19 @@ pub fn event_update(id str, expected_rev int, title str, start str, end str, not
     return ok_result(rev_new, doc)
 }
 
-/// POST /api/v1/events/delete — removes the manifest entry and ALL revision
-/// files of the id so a later recovery cannot resurrect deleted data.
+/// POST /api/v1/events/delete — deletion intent is tombstoned in the
+/// identity FIRST (① intent commit point), then every revision file is
+/// removed (②), then the manifest entry (③ visibility). A tombstoned id is
+/// never folded back in by recovery, so even a partial/interrupted delete
+/// cannot resurrect the event; a failed delete is a visible
+/// storage_unwritable, never a fake success.
 pub fn event_delete(id str, expected_rev int) EventResult {
-    var man str = repository.manifest_ensure()
-    if man == "" {
+    var state str = recover_state()
+    if state == "unproven" {
+        return event_err("recovery_unproven", 0)
+    }
+    var man str = repository.manifest_load()
+    if state == "" || man == "" {
         return event_err("storage_unwritable", 0)
     }
     var rev_old int = repository.manifest_rev(man)
@@ -310,6 +373,14 @@ pub fn event_delete(id str, expected_rev int) EventResult {
     if k < 0 {
         return event_err("not_found", rev_old)
     }
+    var ident str = repository.identity_load()
+    var gen str = repository.identity_generation(ident)
+    var tombs str = repository.identity_tombstones(ident)
+    var tombs2 str = repository.array_append(tombs, json.encode(id))
+    var intent bool = repository.identity_store(gen, rev_old, repository.identity_seq_high(ident), tombs2)
+    if !intent {
+        return event_err("storage_unwritable", rev_old)
+    }
     var removed bool = repository.event_delete_files(id)
     if !removed {
         return event_err("storage_unwritable", rev_old)
@@ -320,6 +391,9 @@ pub fn event_delete(id str, expected_rev int) EventResult {
     if !stored {
         return event_err("storage_unwritable", rev_old)
     }
+    // watermark catches up with the now-visible rev (best-effort: the next
+    // recover repairs lazily via the max() rule)
+    var keep bool = repository.identity_store(gen, rev_new, repository.identity_seq_high(ident), tombs2)
     return ok_result(rev_new, "{}")
 }
 
@@ -328,30 +402,64 @@ pub fn event_delete(id str, expected_rev int) EventResult {
 /// GET /api/v1/events?from_date&to_date — events whose
 /// [start.date, end.date] window intersects the inclusive range;
 /// corrupt/missing files are counted, not silently dropped from the tally.
+/// In the unproven state the listing degrades to the best-effort scan view
+/// (ok=true + recovery_state:"unproven" — data preserved, writes refused).
 pub fn events_list(from_date str, to_date str) EventsList {
     var none List<CalEvent> = List<CalEvent>.new([])
-    var man str = repository.manifest_ensure()
-    if man == "" {
-        var r1 EventsList = EventsList { ok: false, err_code: "storage_unwritable", rev: 0, count: 0, corrupt_count: 0, events: none }
-        return r1
-    }
-    if !repository.is_valid_date(from_date) {
-        var r2 EventsList = EventsList { ok: false, err_code: "invalid_request", rev: repository.manifest_rev(man), count: 0, corrupt_count: 0, events: none }
+    var state str = recover_state()
+    if state == "unproven" {
+        var scan str = unproven_view()
+        if scan == "" {
+            var r0 EventsList = EventsList { ok: false, err_code: "storage_unwritable", rev: 0, count: 0, corrupt_count: 0, recovery_state: "", generation: "", events: none }
+            return r0
+        }
+        if !repository.is_valid_date(from_date) || !repository.is_valid_date(to_date) {
+            var r1 EventsList = EventsList { ok: false, err_code: "invalid_request", rev: 0, count: 0, corrupt_count: 0, recovery_state: "unproven", generation: "", events: none }
+            return r1
+        }
+        var sv = json.parse(scan)
+        var entries str = json.encode(json.get(sv, "entries"))
+        var rev int = json.as_int(json.get(sv, "max_rev"))
+        var corrupt int = json.as_int(json.get(sv, "corrupt"))
+        var out0 List<CalEvent> = List<CalEvent>.new([])
+        var cnt0 int = repository.entries_count(entries)
+        var i0 int = 0
+        while i0 < cnt0 {
+            var doc0 str = repository.event_read(repository.entry_file(entries, i0))
+            if doc0 != "" {
+                var ev0 = cal_event_of(doc0)
+                if repository.range_overlaps(ev0.start, ev0.end, from_date, to_date) {
+                    out0.push(ev0)
+                }
+            }
+            i0 = i0 + 1
+        }
+        var r2 EventsList = EventsList { ok: true, err_code: "", rev: rev, count: out0.len(), corrupt_count: corrupt, recovery_state: "unproven", generation: "", events: out0 }
         return r2
     }
-    if !repository.is_valid_date(to_date) {
-        var r3 EventsList = EventsList { ok: false, err_code: "invalid_request", rev: repository.manifest_rev(man), count: 0, corrupt_count: 0, events: none }
+    var man str = repository.manifest_load()
+    if state == "" || man == "" {
+        var r3 EventsList = EventsList { ok: false, err_code: "storage_unwritable", rev: 0, count: 0, corrupt_count: 0, recovery_state: "", generation: "", events: none }
         return r3
     }
-    var entries str = repository.manifest_entries(man)
-    var cnt int = repository.entries_count(entries)
+    var ident str = repository.identity_load()
+    if !repository.is_valid_date(from_date) {
+        var r4 EventsList = EventsList { ok: false, err_code: "invalid_request", rev: repository.manifest_rev(man), count: 0, corrupt_count: 0, recovery_state: "ok", generation: repository.identity_generation(ident), events: none }
+        return r4
+    }
+    if !repository.is_valid_date(to_date) {
+        var r5 EventsList = EventsList { ok: false, err_code: "invalid_request", rev: repository.manifest_rev(man), count: 0, corrupt_count: 0, recovery_state: "ok", generation: repository.identity_generation(ident), events: none }
+        return r5
+    }
+    var entries2 str = repository.manifest_entries(man)
+    var cnt int = repository.entries_count(entries2)
     var out List<CalEvent> = List<CalEvent>.new([])
-    var corrupt int = 0
+    var corrupt2 int = 0
     var i int = 0
     while i < cnt {
-        var doc str = repository.event_read(repository.entry_file(entries, i))
+        var doc str = repository.event_read(repository.entry_file(entries2, i))
         if doc == "" {
-            corrupt = corrupt + 1
+            corrupt2 = corrupt2 + 1
         } else {
             var ev = cal_event_of(doc)
             if repository.range_overlaps(ev.start, ev.end, from_date, to_date) {
@@ -360,6 +468,6 @@ pub fn events_list(from_date str, to_date str) EventsList {
         }
         i = i + 1
     }
-    var r4 EventsList = EventsList { ok: true, err_code: "", rev: repository.manifest_rev(man), count: out.len(), corrupt_count: corrupt, events: out }
-    return r4
+    var r6 EventsList = EventsList { ok: true, err_code: "", rev: repository.manifest_rev(man), count: out.len(), corrupt_count: corrupt2, recovery_state: "ok", generation: repository.identity_generation(ident), events: out }
+    return r6
 }

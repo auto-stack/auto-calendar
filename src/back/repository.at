@@ -1,4 +1,4 @@
-// repository.at — CALENDAR-001 v1 storage + pure date/time validation.
+// repository.at — CALENDAR-002 v2 storage + pure date/time validation.
 //
 // Split note: this module merges the originally drafted events.at (storage
 // protocol) and datecalc.at (pure validation). The api generator's borrow
@@ -10,19 +10,37 @@
 //   <root>/store/manifest.json   {"schema_version":1,"rev":N,"next_seq":M,
 //                                 "events":[{"id":"ev-1","file":"ev-1.r000001.json","rev":1},...]}
 //   <root>/store/events/ev-<seq>.r<rev 6-digit>.json   immutable per-revision event file
+//   <root>/store/identity.json   {"schema_version":2,"generation":G,"rev_high":N,
+//                                 "seq_high":M,"tombstones":["ev-5",...]}  (CALENDAR-002)
 //
-// Commit protocol (no fs.rename in the embedded facade — capability-decision §2.2):
-//   1. write the new immutable event file (never modified again),
-//   2. rewrite manifest.json (the commit point).
+// v2 credential/deletion protocol (recovery-decision.md §4 — closes the F-5
+// ABA window, deleted-ID reuse, all-deleted ≡ fresh, partial-delete
+// resurrection):
+//   - identity.json carries the MONOTONIC watermark (rev_high/seq_high) and
+//     deletion tombstones; an old conditional credential (expected_rev) can
+//     never be revalidated by a recovery, and allocated ids are never
+//     reissued.
+//   - commit order create/update: ① event file → ② identity (credential
+//     commit point) → ③ manifest (visibility commit point). delete:
+//     ① identity+tombstone (intent commit point) → ② all id files →
+//     ③ manifest without the entry.
+//   - no atomic rename in the embedded facade (re-verified on auto-lang
+//     master 367258e7a): corrupt identity ⇒ fail-closed "unproven" refusal,
+//     never a silent fresh restart (store_recover case D). The only exit is
+//     the operator's explicit AUTO_CALENDAR_RECOVERY_CONSENT=accept-scan.
+//   - v1 stores (valid manifest, no identity) migrate once with a backup
+//     (case C); truly absent store dirs initialize fresh; historical data
+//     without evidence is strictly distinguished from a new empty store.
+//
 // Crash windows: an incomplete event file is not in the manifest; a crash
-// between 1 and 2 leaves an orphan revision file that recovery FOLDS IN
-// (data-preserving bias — losing a saved event is worse than resurfacing one).
-// Corrupt/missing manifest recovery: scan events/ via fs.dir_names (sorted),
-// keep the highest revision per id — zero-padded revisions keep file order
-// numeric — and rewrite the manifest.
+// between ① and ② leaves an orphan revision file that recovery FOLDS IN
+// (data-preserving bias — losing a saved event is worse than resurfacing
+// one). A crash between ② and ③ leaves the watermark ahead of the
+// manifest: the next store_recover repairs the manifest up to the watermark
+// (case A slow path / case B). Tombstoned ids are never folded back in.
 //
-// Conflict model: mutations carry expected_rev (global store revision);
-// mismatch → "conflict".
+// Conflict model: mutations carry expected_rev (global store revision, now
+// watermark-backed); mismatch → "conflict".
 //
 // a2r constraints honored here (T-01/T-02 probes): no json.is_valid
 // (signature drift — json_ok() instead), no computed-index substr (len() is
@@ -250,6 +268,18 @@ pub fn events_dir() str {
 
 pub fn manifest_path() str {
     return store_dir() + "/manifest.json"
+}
+
+pub fn identity_path() str {
+    return store_dir() + "/identity.json"
+}
+
+pub fn migration_backup_path() str {
+    return store_dir() + "/identity-v1-migration.json"
+}
+
+pub fn recovery_report_path() str {
+    return store_dir() + "/recovery-report.json"
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -486,10 +516,201 @@ pub fn file_rev(name str) int {
     return int_at(name, n - 11, 6)
 }
 
-/// Scan events/ and rebuild the manifest from complete files: per id the
-/// highest revision wins (dir_names is sorted; revisions are zero-padded).
-/// Returns the recovered manifest string, "" when the store is unrecoverable.
-pub fn manifest_recover() str {
+// ═══════════════════════════════════════════════════════════
+// Store identity (CALENDAR-002 v2 credential/deletion authority)
+// ═══════════════════════════════════════════════════════════
+
+pub fn identity_json(gen str, rev_high int, seq_high int, tombstones str) str {
+    var s str = "{\"schema_version\":2,\"generation\":"
+    s = s + enc(gen)
+    s = s + ",\"rev_high\":"
+    s = s + num(rev_high)
+    s = s + ",\"seq_high\":"
+    s = s + num(seq_high)
+    s = s + ",\"tombstones\":"
+    s = s + tombstones
+    s = s + "}"
+    return s
+}
+
+/// Raw identity string; "" when missing/corrupt/invalid (fail-closed: a
+/// damaged identity is evidence loss, never silently rebuilt — case D).
+pub fn identity_load() str {
+    var p str = identity_path()
+    if !fs.exists(p) {
+        return ""
+    }
+    var raw str = fs.read_text(p)
+    if !json_ok(raw) {
+        return ""
+    }
+    var it = json.parse(raw)
+    if json.as_int(json.get(it, "schema_version")) != 2 {
+        return ""
+    }
+    var rev int = json.as_int(json.get(it, "rev_high"))
+    var seq int = json.as_int(json.get(it, "seq_high"))
+    if rev < 0 {
+        return ""
+    }
+    if seq < 0 {
+        return ""
+    }
+    var tenc str = json.encode(json.get(it, "tombstones"))
+    if !tenc.starts_with("[") {
+        return ""
+    }
+    return raw
+}
+
+pub fn identity_generation(ident str) str {
+    var it = json.parse(ident)
+    return json.as_string(json.get(it, "generation"))
+}
+
+pub fn identity_rev_high(ident str) int {
+    var it = json.parse(ident)
+    return json.as_int(json.get(it, "rev_high"))
+}
+
+pub fn identity_seq_high(ident str) int {
+    var it = json.parse(ident)
+    return json.as_int(json.get(it, "seq_high"))
+}
+
+pub fn identity_tombstones(ident str) str {
+    var it = json.parse(ident)
+    return json.encode(json.get(it, "tombstones"))
+}
+
+pub fn identity_store(gen str, rev_high int, seq_high int, tombstones str) bool {
+    var mk bool = fs.mkdir_all(store_dir())
+    if !mk {
+        return false
+    }
+    return fs.write_text(identity_path(), identity_json(gen, rev_high, seq_high, tombstones))
+}
+
+fn maxi(a int, b int) int {
+    if a > b {
+        return a
+    }
+    return b
+}
+
+/// id ∈ tombstones?
+pub fn tomb_contains(tombstones str, id str) bool {
+    var arr = json.parse(tombstones)
+    var cnt int = json.len(arr)
+    var i int = 0
+    while i < cnt {
+        if json.as_string(json.get_at(arr, i)) == id {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+/// Any leftover "<id>.r*" file in events/?
+pub fn id_has_files(id str) bool {
+    var names List<str> = fs.dir_names(events_dir())
+    var n int = names.len()
+    var prefix str = id + ".r"
+    var i int = 0
+    while i < n {
+        if names[i].starts_with(prefix) {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+/// tombstones minus ids that are fully gone (no files, no manifest entry).
+fn prune_tombstones(tombstones str, entries str) str {
+    var arr = json.parse(tombstones)
+    var cnt int = json.len(arr)
+    var out str = ""
+    var i int = 0
+    while i < cnt {
+        var id str = json.as_string(json.get_at(arr, i))
+        var keep bool = id_has_files(id) || entry_find(entries, id) >= 0
+        if keep {
+            if out == "" {
+                out = "[" + enc(id)
+            } else {
+                out = out + "," + enc(id)
+            }
+        }
+        i = i + 1
+    }
+    if out == "" {
+        return "[]"
+    }
+    return out + "]"
+}
+
+/// Manifest entries without tombstoned ids (fold-in/rebuild exclusion).
+pub fn entries_without_tombstones(entries str, tombstones str) str {
+    var arr = json.parse(entries)
+    var cnt int = json.len(arr)
+    var out str = ""
+    var i int = 0
+    while i < cnt {
+        var cur = json.get_at(arr, i)
+        var id str = json.as_string(json.get(cur, "id"))
+        if !tomb_contains(tombstones, id) {
+            var enc_i str = json.encode(cur)
+            if out == "" {
+                out = "[" + enc_i
+            } else {
+                out = out + "," + enc_i
+            }
+        }
+        i = i + 1
+    }
+    if out == "" {
+        return "[]"
+    }
+    return out + "]"
+}
+
+/// Fold scan entries into manifest entries: per id the higher rev wins,
+/// unknown ids append (orphan fold-in, tombstone-aware via scan).
+fn merge_entries(entries str, scan_entries str) str {
+    var arr = json.parse(scan_entries)
+    var cnt int = json.len(arr)
+    var out str = entries
+    var i int = 0
+    while i < cnt {
+        var cur = json.get_at(arr, i)
+        var id str = json.as_string(json.get(cur, "id"))
+        var rev int = json.as_int(json.get(cur, "rev"))
+        var file str = json.as_string(json.get(cur, "file"))
+        var k int = entry_find(out, id)
+        if k < 0 {
+            out = array_append(out, entry_json(id, file, rev))
+        } else {
+            if rev > entry_rev(out, k) {
+                out = array_with(out, k, entry_json(id, file, rev))
+            }
+        }
+        i = i + 1
+    }
+    return out
+}
+
+// ═══════════════════════════════════════════════════════════
+// Recovery state machine (recovery-decision.md §4.3 cases A..D)
+// ═══════════════════════════════════════════════════════════
+
+/// Scan events/ (excluding tombstoned ids) into a packed view:
+/// {"entries":[...],"max_rev":N,"max_seq":M,"corrupt":C} — "" when the
+/// events dir is unwritable. Per id the highest revision wins (dir_names is
+/// sorted; revisions zero-padded); unreadable rev-named files count as
+/// corrupt, never silently vanish.
+pub fn scan_view(tombstones str) str {
     var mk bool = fs.mkdir_all(events_dir())
     if !mk {
         return ""
@@ -499,6 +720,7 @@ pub fn manifest_recover() str {
     var entries str = "[]"
     var max_seq int = 0
     var max_rev int = 0
+    var corrupt int = 0
     var i int = 0
     while i < n {
         var name str = names[i]
@@ -508,7 +730,7 @@ pub fn manifest_recover() str {
             if json_ok(raw) {
                 var it = json.parse(raw)
                 var id str = json.as_string(json.get(it, "id"))
-                if id != "" {
+                if id != "" && !tomb_contains(tombstones, id) {
                     var seq int = id_seq(id)
                     if seq > max_seq {
                         max_seq = seq
@@ -525,15 +747,220 @@ pub fn manifest_recover() str {
                         entries = array_append(entries, entry_json(id, name, rev))
                     }
                 }
+            } else {
+                corrupt = corrupt + 1
             }
         }
         i = i + 1
     }
-    var man str = manifest_json(max_rev, max_seq + 1, entries)
-    if !fs.write_text(manifest_path(), man) {
+    var s str = "{\"entries\":"
+    s = s + entries
+    s = s + ",\"max_rev\":"
+    s = s + num(max_rev)
+    s = s + ",\"max_seq\":"
+    s = s + num(max_seq)
+    s = s + ",\"corrupt\":"
+    s = s + num(corrupt)
+    s = s + "}"
+    return s
+}
+
+/// Case A: both files valid. Watermark = max(manifest, identity, scan);
+/// fold orphans; prune finished tombstones; repair whichever file lags.
+fn recover_both(ident str, man str) str {
+    var tombs str = identity_tombstones(ident)
+    var man_rev int = manifest_rev(man)
+    var man_seq int = manifest_next_seq(man) - 1
+    var id_rev int = identity_rev_high(ident)
+    var id_seq int = identity_seq_high(ident)
+    // fast path: fully consistent quiescent state (no scan needed)
+    if man_rev == id_rev && man_seq == id_seq && tombs == "[]" {
+        return "ok"
+    }
+    var scan str = scan_view(tombs)
+    if scan == "" {
         return ""
     }
-    return man
+    var sv = json.parse(scan)
+    var scan_entries str = json.encode(json.get(sv, "entries"))
+    var scan_rev int = json.as_int(json.get(sv, "max_rev"))
+    var scan_seq int = json.as_int(json.get(sv, "max_seq"))
+    var hi_rev int = maxi(man_rev, maxi(id_rev, scan_rev))
+    var hi_seq int = maxi(man_seq, maxi(id_seq, scan_seq))
+    var merged str = merge_entries(manifest_entries(man), scan_entries)
+    var tombs2 str = prune_tombstones(tombs, merged)
+    var changed bool = false
+    if merged != manifest_entries(man) {
+        changed = true
+    }
+    if tombs2 != tombs {
+        changed = true
+    }
+    if man_rev != hi_rev {
+        changed = true
+    }
+    if man_seq != hi_seq {
+        changed = true
+    }
+    if changed {
+        var newman str = manifest_json(hi_rev, hi_seq + 1, merged)
+        if !fs.write_text(manifest_path(), newman) {
+            return ""
+        }
+    }
+    if id_rev < hi_rev || id_seq < hi_seq || tombs2 != tombs {
+        // best-effort; the manifest now carries the watermark and the next
+        // recover repairs the identity lazily (never the reverse)
+        var keep bool = identity_store(identity_generation(ident), hi_rev, hi_seq, tombs2)
+    }
+    return "ok"
+}
+
+/// Case B: identity valid, manifest lost/corrupt. Rebuild from scan
+/// (tombstone-aware fold-in), watermark floors at the identity values.
+fn recover_scan(ident str) str {
+    var tombs str = identity_tombstones(ident)
+    var scan str = scan_view(tombs)
+    if scan == "" {
+        return ""
+    }
+    var sv = json.parse(scan)
+    var scan_entries str = json.encode(json.get(sv, "entries"))
+    var scan_rev int = json.as_int(json.get(sv, "max_rev"))
+    var scan_seq int = json.as_int(json.get(sv, "max_seq"))
+    var hi_rev int = maxi(identity_rev_high(ident), scan_rev)
+    var hi_seq int = maxi(identity_seq_high(ident), scan_seq)
+    var newman str = manifest_json(hi_rev, hi_seq + 1, scan_entries)
+    if !fs.write_text(manifest_path(), newman) {
+        return ""
+    }
+    var tombs2 str = prune_tombstones(tombs, scan_entries)
+    if tombs2 != tombs {
+        var keep bool = identity_store(identity_generation(ident), hi_rev, hi_seq, tombs2)
+    }
+    return "ok"
+}
+
+/// Case C: valid manifest without identity — a v1 store migrating once.
+/// Backs up the original manifest first (controlled, auditable), derives
+/// the watermark from max(manifest, scan) and starts tombstone-free.
+/// Boundary (disclosed): pre-migration deletion facts do not exist on v1
+/// disk, so a v1 partial-delete leftover can fold in — unrecoverable, not
+/// silently hidden (spec delta states this).
+fn recover_migrate(man str) str {
+    var raw str = fs.read_text(manifest_path())
+    var mk bool = fs.mkdir_all(store_dir())
+    if !mk {
+        return ""
+    }
+    var backed bool = fs.write_text(migration_backup_path(), raw)
+    if !backed {
+        return ""
+    }
+    var scan str = scan_view("[]")
+    if scan == "" {
+        return ""
+    }
+    var sv = json.parse(scan)
+    var scan_entries str = json.encode(json.get(sv, "entries"))
+    var scan_rev int = json.as_int(json.get(sv, "max_rev"))
+    var scan_seq int = json.as_int(json.get(sv, "max_seq"))
+    var hi_rev int = maxi(manifest_rev(man), scan_rev)
+    var hi_seq int = maxi(manifest_next_seq(man) - 1, scan_seq)
+    var ok1 bool = identity_store("g-v1", hi_rev, hi_seq, "[]")
+    if !ok1 {
+        return ""
+    }
+    var merged str = merge_entries(manifest_entries(man), scan_entries)
+    var newman str = manifest_json(hi_rev, hi_seq + 1, merged)
+    if !fs.write_text(manifest_path(), newman) {
+        return ""
+    }
+    return "ok"
+}
+
+/// Case D consent exit (the ONLY path that rebuilds credentials from scan
+/// alone): operator sets AUTO_CALENDAR_RECOVERY_CONSENT=accept-scan. Writes
+/// the recovery report BEFORE adopting the new identity; the residual
+/// evidence-loss boundary is recorded there (recovery-decision §4.4 R-1).
+fn consent_recover() str {
+    var scan str = scan_view("[]")
+    if scan == "" {
+        return ""
+    }
+    var sv = json.parse(scan)
+    var scan_entries str = json.encode(json.get(sv, "entries"))
+    var scan_rev int = json.as_int(json.get(sv, "max_rev"))
+    var scan_seq int = json.as_int(json.get(sv, "max_seq"))
+    var report str = "{\"reason\":\"identity_and_manifest_unusable\""
+    report = report + ",\"deletion_facts\":\"unknown\""
+    report = report + ",\"residual\":\"stale writer holding exactly the scanned max rev could revalidate (R-1)\""
+    report = report + ",\"scan\":" + scan
+    var old_ident str = fs.read_text(identity_path())
+    report = report + ",\"identity_remnant\":" + enc(old_ident)
+    var old_man str = fs.read_text(manifest_path())
+    report = report + ",\"manifest_remnant\":" + enc(old_man)
+    report = report + "}"
+    var r_ok bool = fs.write_text(recovery_report_path(), report)
+    if !r_ok {
+        return ""
+    }
+    var ok1 bool = identity_store("g-recovered", scan_rev, scan_seq, "[]")
+    if !ok1 {
+        return ""
+    }
+    var newman str = manifest_json(scan_rev, scan_seq + 1, scan_entries)
+    if !fs.write_text(manifest_path(), newman) {
+        return ""
+    }
+    return "ok"
+}
+
+/// Case D: no usable credentials but store traces exist — historical data
+/// without evidence is NEVER silently reset to fresh. Fresh init happens
+/// only when the store dir is absent or completely empty.
+fn recover_unknown() str {
+    var traces bool = false
+    if fs.exists(store_dir()) {
+        var names List<str> = fs.dir_names(store_dir())
+        if names.len() > 0 {
+            traces = true
+        }
+    }
+    if !traces {
+        var ok1 bool = identity_store("g-new", 0, 0, "[]")
+        if !ok1 {
+            return ""
+        }
+        var ok2 bool = manifest_store(0, 1, "[]")
+        if !ok2 {
+            return ""
+        }
+        return "ok"
+    }
+    if env.get("AUTO_CALENDAR_RECOVERY_CONSENT") == "accept-scan" {
+        return consent_recover()
+    }
+    return "unproven"
+}
+
+/// Bring the store to a usable state; returns "ok", "unproven" (evidence
+/// insufficient — mutations must refuse with recovery_unproven and reads
+/// degrade to a best-effort scan view) or "" (storage unwritable).
+/// In the "ok" state manifest.json is valid on disk and watermark-backed.
+pub fn store_recover() str {
+    var ident str = identity_load()
+    var man str = manifest_load()
+    if ident != "" {
+        if man != "" {
+            return recover_both(ident, man)
+        }
+        return recover_scan(ident)
+    }
+    if man != "" {
+        return recover_migrate(man)
+    }
+    return recover_unknown()
 }
 
 fn entry_find(entries str, id str) int {
@@ -548,24 +975,6 @@ fn entry_find(entries str, id str) int {
         i = i + 1
     }
     return -1
-}
-
-/// Current manifest, recovering (or starting fresh) when missing/corrupt.
-/// "" when the store is unwritable.
-pub fn manifest_ensure() str {
-    var man str = manifest_load()
-    if man != "" {
-        return man
-    }
-    var recovered str = manifest_recover()
-    if recovered != "" {
-        return recovered
-    }
-    var fresh bool = manifest_store(0, 1, "[]")
-    if !fresh {
-        return ""
-    }
-    return manifest_load()
 }
 
 // ═══════════════════════════════════════════════════════════

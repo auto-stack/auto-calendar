@@ -6,7 +6,7 @@ author: [Codex]
 created_at: 2026-11-01
 updated_at: 2026-11-01
 plan_revision: 1
-current_step: 2
+current_step: 3
 total_steps: 8
 base_branch: main
 base_commit: 411805cba8283082ad88de47a15686053d46a0f7
@@ -103,7 +103,8 @@ review独立上下文必须核对C-01/C-02的新旧写者身份、文件状态�
   - [✅ 已完成] 决策稿 docs/plans/evidence/002/recovery-decision.md；4 窗口全复现（F-5 ABA 陈旧凭据落盘、删最高ID重用ev-5、全删≡新空库+ev-1重发、删中途残留r3折叠复活），控制组2项成立（锁文件删除不假成功、孤儿折叠保全）；SDK复核：内嵌 facade 仍无 rename/原子写，write_text=截断写，设计走持久化单调高水位+墓碑+证据不足拒写（§4.3分案A..D+consent出口），manifest格式不动、StoreStatus增recovery_state/generation、新err_code recovery_unproven。证据：plan-artifacts/plan-002/evidence/t00-repro-20261101-223021.json（红7/控制2、逐项观察+存储清单）、probe_t00_recovery.py（复跑入口）、auto CLI 0.1.0+plan-890-verified-r7-t19-5-g55c98c7 sha256 390e664e…（全量入证）、auto-lang master 367258e7a（只读）。
 - [x] T-01（owner_stage=work；依赖T-00；AC-01）：复用旧门收窄自有进程/端口清理并固定独立准备/工具身份。
   - [✅ 已完成] tests/free_ports.py 重写为所有权门：正识别（image路径在仓内或cmdline含仓路径，且启动晚于运行起点）才可收割，旁观者只报告不杀；`--check` 只查不杀（占用即 rc=1+pid/image 明细）。verify_basic.py 同步收窄：删除 image名 级 taskkill 与 free_ports 广域清理，kill_all=Ownership.harvest（只杀注册pid/树），端口占用中止改为明细报告，证据 JSON 固化工具身份（auto --version、node --version、sha256、cleanup 报告、纪律声明）。探针 5/5：check 报告占用不杀、verify 中止 rc=2 旁观者存活、栈识别、自有收割只杀自有（后端+auto树）、旁观者全程存活。证据：plan-artifacts/plan-002/evidence/t01-ownproc-20261101-223625.json + probe_t01_ownproc.py。
-- [ ] T-02（owner_stage=work；依赖T-00及确需最小前置；AC-02/03）：实现最小恢复身份/删除/分配器保护及旧v1受控迁移，先后回放C-01..03。
+- [x] T-02（owner_stage=work；依赖T-00及确需最小前置；AC-02/03）：实现最小恢复身份/删除/分配器保护及旧v1受控迁移，先后回放C-01..03。
+  - [✅ 已完成] 无跨仓前置需要（当前SDK原语足够）。实现：repository.at 增 identity.json（schema 2：generation/rev_high/seq_high/tombstones）、scan_view（墓碑感知折叠扫描）、store_recover 分案A..D（快路径+慢修复、v1迁移先备份 identity-v1-migration.json、case D 拒写、consent 出口写 recovery-report.json 后重锚 g-recovered），manifest_recover/manifest_ensure 退役；db.at 五入口改 store_recover 门（unproven→recovery_unproven 拒写+只读扫描视图）、create/update ②identity水位→③manifest、delete ①墓碑→②删文件→③manifest；api.at StoreStatus/EventsList 增 recovery_state+generation。回放30/30：C-01 冷重启后水位rev=8、陈旧凭据conflict、新读取者可写、事件文件逐字节不变；C-02 删最高ID后新id=ev-6、全删rev=6 vs 新空rev=0、id续ev-4；C-03 墓碑压残留文件不复活、双凭据丢失拒写且原件hash不变、v1迁移备份字节一致+g-v1、consent后写入rev=3、孤儿折叠控制保留。证据：plan-artifacts/plan-002/evidence/t02-replay-20261101-225947.json + probe_t02_replay.py。
 - [ ] T-03（owner_stage=work；依赖T-01/02；AC-04）：前端消费恢复/冲突契约，真实UI跑跨月/失败保稿/退出重开后下一次写入。
 - [ ] T-04（owner_stage=work；依赖T-03；AC-04）：使补充入口可执行，跑C-01..05、旧墙钟/事件门及真实故障反控，准备SD候选。
 - [ ] T-05（owner_stage=work；依赖T-04；AC-01..04）：核对漂移/覆盖和README/roadmap，提交execution_done。
@@ -114,7 +115,8 @@ review独立上下文必须核对C-01/C-02的新旧写者身份、文件状态�
 
 - stage: new | plan_id: CALENDAR-002 | plan_revision: 1 | outcome: pass（有界T-00准备就绪；本轮没有实现或产品验收） | next: work/T-00（等待后续实施指令）。
 - 已归档001、现实现Spec和产品源码保持不变；规划结构/链接通过不等于功能通过。review以同一clone的独立上下文核验，不自动创建agent/chat或指定模型。
-- stage: work | plan_id: CALENDAR-002 | plan_revision: 1 | outcome: pass | worktree_path: D:/autostack/auto-calendar（独立clone main，按计划§2覆盖默认worktree规约） | branch: main | base_commit: 3db7cdd | code_commit: 见T-00提交 | dependency_revisions: auto CLI 0.1.0+plan-890-verified-r7-t19-5-g55c98c7（sha256 390e664e…）；auto-lang master 367258e7a（只读facade依据） | task_ids: T-00 | evidence=docs/plans/evidence/002/recovery-decision.md（红基线7红+2控制全记录：S1 F-5 ABA、S2 删ID重用、S3 全删≡新空库、S4 删中断复活+锁文件不假成功、S5 孤儿折叠保全；SDK当前原语复核、v2协议冻结§4.1..4.6、逐中断点语义、迁移/consent边界、残余R-1披露） | blockers=无 | next_responsible_role=work（T-01）。
+- stage: work | plan_id: CALENDAR-002 | plan_revision: 1 | outcome: pass | worktree_path: D:/autostack/auto-calendar（独立clone main，按计划§2覆盖默认worktree规约） | branch: main | base_commit: 3db7cdd | code_commit: 见T-00提交 | dependency_revisions: auto CLI 0.1.0+plan-890-verified-r7-t19-5-g55c98c7（sha256 390e664e…）；auto-lang master 367258e7a（只读facade依据） | task_ids: T-00 | evidence=docs/plans/evidence/002/recovery-decision.md（红基线7红+2控制全记录：S1 F-5 ABA、S2 删ID重用、S3 全删≡新空库、S4 删中断复活+锁文件不假成功、S5 孤儿折叠保全；SDK当前原语复核、v2协议冻结§4.1..4.6、逐中断点语义、迁移/consent边界、残余R-1披露） | blockers=无 | next_responsible_role=work（T-02）。
+- stage: work | plan_id: CALENDAR-002 | plan_revision: 1 | outcome: pass | worktree_path: D:/autostack/auto-calendar | branch: main | base_commit: 67b5827 | code_commit: 见T-02提交 | dependency_revisions: 同T-00 | task_ids: T-02 | evidence=plan-artifacts/plan-002/evidence/t02-replay-20261101-225947.json（30/30：C-01..03全绿+R0/S5/S9控制，含真实冷重启与consent重启两轮进程级注入）+ src/back/{repository,db,api}.at（v2协议实现） | blockers=无 | next_responsible_role=work（T-03）。
 - stage: work | plan_id: CALENDAR-002 | plan_revision: 1 | outcome: pass | worktree_path: D:/autostack/auto-calendar | branch: main | base_commit: 53587a4 | code_commit: 见T-01提交 | dependency_revisions: 同T-00 | task_ids: T-01 | evidence=plan-artifacts/plan-002/evidence/t01-ownproc-20261101-223625.json（5/5：旁观者三路径存活、自有收割只及注册pid）+ tests/free_ports.py（所有权门）+ tests/basic/verify_basic.py（kill_all/端口门收窄+工具身份入证） | blockers=无 | next_responsible_role=work（T-02）。
 
 ## 10. 待澄清事项

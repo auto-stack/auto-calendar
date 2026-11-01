@@ -46,6 +46,8 @@ pub type EventsList = {
     rev: int
     count: int
     corrupt_count: int
+    recovery_state: str
+    generation: str
     events: []CalEvent
 }
 
@@ -56,6 +58,8 @@ pub type StoreStatus = {
     count: int
     corrupt_count: int
     test_mode: bool
+    recovery_state: str
+    generation: str
     err: str
 }
 
