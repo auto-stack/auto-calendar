@@ -1,8 +1,11 @@
-# calendar — 基本能力规范（CALENDAR-001 首版）
+# calendar — 基本能力规范（CALENDAR-001 首版；§4 由 CALENDAR-002 修订）
 
-> 状态：随 CALENDAR-001 prepared，merge 复核后生效（本文为 canonical 目标草稿；
-> 生效前不作为独立需求来源）。来源合同：`docs/plans/001-local-events.md` r2 及其
-> 冻结证据 `docs/plans/evidence/001/capability-decision.md`。
+> 状态：CALENDAR-001 首版已生效；**§4 存储恢复合同由 CALENDAR-002 修订为 v2
+> （本文即 r2 候选稿，随 002 merge 复核生效）**。来源合同：
+> `docs/plans/archived/001-local-events.md` r2、`docs/plans/002-recovery-revision-and-deletion.md` r1
+> 及其冻结证据 `docs/plans/evidence/001/capability-decision.md`、
+> `docs/plans/evidence/002/recovery-decision.md`；恢复身份细则见
+> `docs/specs/calendar/recovery-identity.md`（SD-02）。
 
 ## 1. 首版用户任务（SD-01）
 
@@ -50,46 +53,67 @@
 - 后端时钟实现当前走 `shell.exec` → PowerShell（Windows）；Linux 等发行版基础
   完成后按其门档另验。
 
-## 4. 存储、失败与恢复合同（SD-02）
+## 4. 存储、失败与恢复合同（SD-02 → CALENDAR-002 修订为 v2；细则见 recovery-identity.md）
 
 - 数据根解析：`AUTO_CALENDAR_DATA` → `%APPDATA%/auto-calendar` → `XDG_DATA_HOME`
   → `~/.local/share/auto-calendar`（Windows 优先）。布局：
   `<root>/store/manifest.json`（提交点：rev/next_seq/events 索引）+
-  `<root>/store/events/ev-<seq>.r<6位rev>.json`（不可变版本文件）。
-- 提交序：先写新版本事件文件，再重写 manifest。无 rename/fsync 原语（工具链
-  事实），不宣称掉电级原子性；崩溃窗口语义：
-  - 版本文件写一半：未入 manifest ⇒ 视为不存在；
-  - 版本文件已写、manifest 未更新：孤儿完整文件，**恢复时并入**
-    （数据保全倾向：找回已保存事件优先于丢弃）；
-  - manifest 损坏/丢失：扫描 events 目录按 id 取最高版本重建（零填充版本号
-    保证文件序=数值序）。
-- 删除移除该 id 的全部版本文件（恢复不可复活已删除事件）。
-- 已知限制：manifest 损坏重建时全局 rev 取自幸存事件文件的最高版本；删除会使
-  真实全局 rev 高于幸存文件版本，重建后的 rev 可能回退，理论上允许一个持有
-  陈旧 expected_rev 的写者通过乐观校验。单写者 + 人工操作节奏下风险可忽略；
-  后续修订可将全局 rev 持久化到独立位置消除此窗口（F-5 注记）。
-- 冲突模型：变更携带 `expected_rev`（调用方最近可见的全局 store revision）；
+  `<root>/store/identity.json`（凭据权威：rev_high/seq_high 单调水位、删除墓碑、
+  generation）+ `<root>/store/events/ev-<seq>.r<6位rev>.json`（不可变版本文件）。
+- 提交序（无 rename/fsync 原语，不宣称掉电级原子性）：
+  - create/update：① 写新版本事件文件 → ② 重写 identity（凭据提交点）→
+    ③ 重写 manifest（可见提交点）；
+  - delete：① identity 加墓碑（删除意图提交点）→ ② 删该 id 全部版本文件 →
+    ③ 重写 manifest（去条目、rev+1）。
+  崩溃窗口语义：①后孤儿版本文件由恢复折叠并入（数据保全倾向不变）；②后水位
+  领先 manifest，恢复按 max 修复，永不回退。
+- 删除以墓碑为事实：任何恢复路径不得复活墓碑 id（含删除中断后残留文件的
+  折叠排除）；删除失败必须显式报 `storage_unwritable`，不假成功。
+- 恢复身份（F-5 窗口关闭）：全局 rev / 分配 seq 以 identity 水位为下界，
+  **旧条件凭据（expected_rev）在恢复后不得再次有效**；已分配 id 永不重发；
+  「全部删除的历史库」与「从未使用的新空库」可区分（水位 ≠ 0 vs 0）。
+- 凭据丢失的拒写保全：identity 与 manifest 同时缺失/损坏且 store 目录有痕迹时，
+  存储进入 `recovery_unproven` 只读保全态——原文件一字不动、变更全部拒绝、
+  读取降级为尽力扫描；唯一出口是操作者显式
+  `AUTO_CALENDAR_RECOVERY_CONSENT=accept-scan` 受控恢复（先写恢复报告再重锚）。
+  严禁凭幸存 max 或 fresh 静默重造身份。
+- v1 迁移：合法 manifest 而无 identity 的旧存储首次打开时受控迁移——先备份原
+  manifest 至 `store/identity-v1-migration.json`，再派生水位（max(manifest, 扫描)）。
+  边界（诚实声明）：v1 时代盘上不存在删除事实，迁移前发生的删除中断残留不在
+  修复范围；v1 时代已发生的全删+manifest 丢失不可追溯。
+- 冲突模型：变更携带 `expected_rev`（全局 store revision，现由水位背书）；
   不匹配 → `err_code:"conflict"`，前端不清空表单、重取后由用户重试，绝不静默覆盖。
+  新错误码 `recovery_unproven`（证据不足拒写；旧客户端视作普通错误，不会静默成功）。
 - 结构化错误面（HTTP 始终 200 + 信封，或 422 反序列化错误由前端视为传输失败）：
   `invalid_title / invalid_notes / invalid_start / invalid_end / inverted_range /
   not_found / conflict / storage_unwritable / clock_unavailable / invalid_request /
-  test_mode_disabled`。
-- 规模边界（v1 承诺）：整仓快照式重写 + 线性扫描，数百事件内为设计规模；
-  千级以上需修订（届时可评估 notes 已验证的 SQLite 仓储）。
+  test_mode_disabled / recovery_unproven`。
+- 规模边界（v2 维持 v1 承诺）：整仓快照式重写 + 线性扫描 + 每变更一次小文件
+  identity 写，数百事件内为设计规模；千级以上需修订（届时可评估 notes 已验证的
+  SQLite 仓储）。
 
 ## 5. 交互与双端合同（SD-02）
 
 - 时钟/仓储不可用：显式错误态（横幅/提示），不渲染假数据，不回落固定日期。
+- 存储身份未能证明（recovery_unproven）：显式保全横幅 + 变更拒绝提示（含受控
+  恢复指引），已保存事件照常展示，保存失败时表单不关闭、输入逐字保留。
 - 保存失败：表单不关闭、用户输入逐字保留、错误码可见；成功才关闭并刷新。
 - 删除为行内即时操作（v1 无二次确认）；受 expected_rev 保护。
 - 双端一致性：同一后端合同、同一 store 源码；两端差异仅渲染层。双端验收以
-  `tests/basic/verify_basic.py --profile vue|vm` 为准（端口 17820/17821，隔离
-  数据目录，端口被占即失败不漂移）。
+  `tests/basic/verify_basic.py --profile vue|vm` 与
+  `tests/basic/verify_recovery_identity.py --profile vue|vm` 为准（端口
+  17820/17821，隔离数据目录，端口被占即失败不漂移，旁观进程永不清理）。
 
 ## 6. 验收入口
 
-- 永久回放：`python tests/basic/verify_basic.py --profile vue` /
+- 永久回放（001 基本能力）：`python tests/basic/verify_basic.py --profile vue` /
   `--profile vm`（V-01 可控时钟闰日/跨午夜、V-02 同日多事件+跨月+稳定 id+
   重开、V-03 非法日期/倒置拒绝+输入保留）。
+- 永久回放（002 恢复身份）：`python tests/basic/verify_recovery_identity.py
+  --profile vue` / `--profile vm`（C-01 陈旧凭据拒绝、C-02 id 不重用/全删可辨、
+  C-03 拒写保全+迁移+受控恢复、C-04 中文跨月 CRUD/强杀重开、旧策略反控）。
 - 运行：仓根 `auto run`（Vue）与 `auto run -r vm`（VM 窗口）；后端 17821；
-  需要 auto CLI（版本见 evidence/001/capability-decision.md §1）。
+  需要 auto CLI（版本见 evidence/001/capability-decision.md §1、
+  evidence/002/recovery-decision.md §1）。
+- 独立准备门：`python tests/free_ports.py --check`（只查不杀；占用即中止，
+  本运行只收割自有的进程——`tests/free_ports.py` 模块的 Ownership 纪律）。

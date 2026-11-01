@@ -6,7 +6,7 @@ author: [Codex]
 created_at: 2026-11-01
 updated_at: 2026-11-01
 plan_revision: 1
-current_step: 4
+current_step: 5
 total_steps: 8
 base_branch: main
 base_commit: 411805cba8283082ad88de47a15686053d46a0f7
@@ -107,7 +107,8 @@ review独立上下文必须核对C-01/C-02的新旧写者身份、文件状态�
   - [✅ 已完成] 无跨仓前置需要（当前SDK原语足够）。实现：repository.at 增 identity.json（schema 2：generation/rev_high/seq_high/tombstones）、scan_view（墓碑感知折叠扫描）、store_recover 分案A..D（快路径+慢修复、v1迁移先备份 identity-v1-migration.json、case D 拒写、consent 出口写 recovery-report.json 后重锚 g-recovered），manifest_recover/manifest_ensure 退役；db.at 五入口改 store_recover 门（unproven→recovery_unproven 拒写+只读扫描视图）、create/update ②identity水位→③manifest、delete ①墓碑→②删文件→③manifest；api.at StoreStatus/EventsList 增 recovery_state+generation。回放30/30：C-01 冷重启后水位rev=8、陈旧凭据conflict、新读取者可写、事件文件逐字节不变；C-02 删最高ID后新id=ev-6、全删rev=6 vs 新空rev=0、id续ev-4；C-03 墓碑压残留文件不复活、双凭据丢失拒写且原件hash不变、v1迁移备份字节一致+g-v1、consent后写入rev=3、孤儿折叠控制保留。证据：plan-artifacts/plan-002/evidence/t02-replay-20261101-225947.json + probe_t02_replay.py。
 - [x] T-03（owner_stage=work；依赖T-01/02；AC-04）：前端消费恢复/冲突契约，真实UI跑跨月/失败保稿/退出重开后下一次写入。
   - [✅ 已完成] calendar_store.at 增 recovery_state/generation 字段，Init/月导航/SelectDay/三变更/SaveForm 全路径捕获列表态，recovery_unproven 失败时置 unproven 且不动 store_rev；app.at 增保全横幅（unproven 显式态+consent 指引）与表单专用拒写文案（输入保留不变）。新增 tests/basic/recovery_driver.mjs（seed/restart/unproven/consent 四相）与 tests/basic/verify_recovery_identity.py（双 profile 永久入口：C-01/02 HTTP 反例+C-03 UI 面+C-04 中文跨月 CRUD/强杀重开/墙钟不改/下一次写入+consent 后真实 UI 写入），verify_basic.launch_app 增 extra_env。vue 轨 31/31（r04 墙钟字段与 id 稳定、r03 横幅+拒写+保稿、c01/c02 反例、c03 consent 重锚+4事件保全），清理 clean。证据：docs/plans/attachments/002/verify-rec-vue-20261101-231622.json（local-only）。
-- [ ] T-04（owner_stage=work；依赖T-03；AC-04）：使补充入口可执行，跑C-01..05、旧墙钟/事件门及真实故障反控，准备SD候选。
+- [x] T-04（owner_stage=work；依赖T-03；AC-04）：使补充入口可执行，跑C-01..05、旧墙钟/事件门及真实故障反控，准备SD候选。
+  - [✅ 已完成] 双轨补充入口可执行：verify_recovery_identity.py --profile vue|vm（vm 轨 MCP 驱动；首轮 23/28 暴露 5 处探针 oracle 缺陷——编辑按首行、双次"<"跨过一月、month_events 渲染为 vmref、横幅/f_title 查错字段——修复后 28/28，产品零改动）。总门：recovery vue 31/31 + vm 28/28；旧门 verify_basic vue 19/19 + vm 11/11（001 墙钟/事件/重开合同无回归）；深电池 probe_t02_replay 30/30（真实冷重启、迁移备份字节、consent 报告）。旧 max 策略反控=c01-stale-refused/c02-id-not-reissued 断言（旧策略必红）。SD 候选已备：basic-capabilities.md §4 r2 修订稿 + 新 recovery-identity.md（canonical 候选，随 merge 生效）。证据：attachments/002/verify-rec-{vue-20261101-231622,vm-20261101-234520}.json、verify-{vue-20261101-232913,vm-20261101-233228}.json（local-only）、plan-artifacts/plan-002/evidence/t02-replay-20261101-233229.json。
 - [ ] T-05（owner_stage=work；依赖T-04；AC-01..04）：核对漂移/覆盖和README/roadmap，提交execution_done。
 - [ ] T-06（owner_stage=review；依赖T-05；AC-05）：同clone独立上下文最终复审。
 - [ ] T-07（owner_stage=merge；依赖T-06 pass；AC-06）：仅app规范/归档/提交push收尾。
@@ -119,6 +120,7 @@ review独立上下文必须核对C-01/C-02的新旧写者身份、文件状态�
 - stage: work | plan_id: CALENDAR-002 | plan_revision: 1 | outcome: pass | worktree_path: D:/autostack/auto-calendar（独立clone main，按计划§2覆盖默认worktree规约） | branch: main | base_commit: 3db7cdd | code_commit: 见T-00提交 | dependency_revisions: auto CLI 0.1.0+plan-890-verified-r7-t19-5-g55c98c7（sha256 390e664e…）；auto-lang master 367258e7a（只读facade依据） | task_ids: T-00 | evidence=docs/plans/evidence/002/recovery-decision.md（红基线7红+2控制全记录：S1 F-5 ABA、S2 删ID重用、S3 全删≡新空库、S4 删中断复活+锁文件不假成功、S5 孤儿折叠保全；SDK当前原语复核、v2协议冻结§4.1..4.6、逐中断点语义、迁移/consent边界、残余R-1披露） | blockers=无 | next_responsible_role=work（T-02）。
 - stage: work | plan_id: CALENDAR-002 | plan_revision: 1 | outcome: pass | worktree_path: D:/autostack/auto-calendar | branch: main | base_commit: 67b5827 | code_commit: 见T-02提交 | dependency_revisions: 同T-00 | task_ids: T-02 | evidence=plan-artifacts/plan-002/evidence/t02-replay-20261101-225947.json（30/30：C-01..03全绿+R0/S5/S9控制，含真实冷重启与consent重启两轮进程级注入）+ src/back/{repository,db,api}.at（v2协议实现） | blockers=无 | next_responsible_role=work（T-03）。
 - stage: work | plan_id: CALENDAR-002 | plan_revision: 1 | outcome: pass | worktree_path: D:/autostack/auto-calendar | branch: main | base_commit: a8417ae | code_commit: 见T-03提交 | dependency_revisions: 同T-00 | task_ids: T-03 | evidence=docs/plans/attachments/002/verify-rec-vue-20261101-231622.json（vue 轨 31/31：跨月 CRUD/强杀重开/墙钟不改/unproven 横幅+拒写+保稿/consent 后下一次写入，local-only）+ src/front/{calendar_store,app}.at + tests/basic/{recovery_driver.mjs,verify_recovery_identity.py} | blockers=无（vm 轨由 T-04 统一门跑） | next_responsible_role=work（T-04）。
+- stage: work | plan_id: CALENDAR-002 | plan_revision: 1 | outcome: pass | worktree_path: D:/autostack/auto-calendar | branch: main | base_commit: 662c6f6 | code_commit: 见T-04提交 | dependency_revisions: 同T-00 | task_ids: T-04 | evidence=四门全绿（rec-vue 31/31、rec-vm 28/28 修复 oracle 后、basic-vue 19/19、basic-vm 11/11、深电池 30/30）+ docs/specs/calendar/{basic-capabilities.md §4 r2, recovery-identity.md} 候选稿 | blockers=无 | next_responsible_role=work（T-05）。
 - stage: work | plan_id: CALENDAR-002 | plan_revision: 1 | outcome: pass | worktree_path: D:/autostack/auto-calendar | branch: main | base_commit: 53587a4 | code_commit: 见T-01提交 | dependency_revisions: 同T-00 | task_ids: T-01 | evidence=plan-artifacts/plan-002/evidence/t01-ownproc-20261101-223625.json（5/5：旁观者三路径存活、自有收割只及注册pid）+ tests/free_ports.py（所有权门）+ tests/basic/verify_basic.py（kill_all/端口门收窄+工具身份入证） | blockers=无 | next_responsible_role=work（T-02）。
 
 ## 10. 待澄清事项

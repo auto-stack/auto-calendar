@@ -93,9 +93,9 @@ def api_ids(events):
 
 # ── VM-track UI helpers (AutoUI MCP, same pattern as verify_basic.run_vm)
 
-def vm_find_btn(snap, label):
-    m = re.search(r'button #(vnode_\d+|aura_\d+) "' + re.escape(label) + '"', snap)
-    return m.group(1) if m else None
+def vm_find_btn(snap, label, nth=0):
+    ids = re.findall(r'button #(vnode_\d+|aura_\d+) "' + re.escape(label) + '"', snap)
+    return ids[nth] if len(ids) > nth else None
 
 
 def vm_create(title, start, end, save_label="保存"):
@@ -124,9 +124,11 @@ def vm_create(title, start, end, save_label="保存"):
     return True
 
 
-def vm_edit_first_title(new_title):
+def vm_edit_second_row_title(new_title):
+    """Edit the SECOND visible row's 编辑 button — both seeded events cover
+    02-29 and render in creation order (跨月甲 first, 当日乙 second)."""
     snap = vb.mcp_call("autoui_snapshot")
-    btn = vm_find_btn(snap, "编辑")
+    btn = vm_find_btn(snap, "编辑", nth=1)
     if not btn:
         return False
     vb.mcp_call("autoui_action", element_id=btn, action="press")
@@ -203,8 +205,8 @@ def main() -> int:
             check("r01-vm-injected-today", "2028-02-29" in state, state[:120])
             check("r01-vm-create-crossmonth", vm_create("恢复跨月甲", "2028-02-28 22:00", "2028-03-02 08:00"))
             check("r01-vm-create-sameday", vm_create("恢复当日乙", "2028-02-29 09:00", "2028-02-29 10:00"))
-            check("r01-vm-edit", vm_edit_first_title("恢复当日乙改"))
-            check("r01-vm-prev-month", vm_press("<") and vm_press("<"))
+            check("r01-vm-edit", vm_edit_second_row_title("恢复当日乙改"))
+            check("r01-vm-prev-month", vm_press("<"))
             snap = vb.mcp_call("autoui_snapshot")
             check("r01-vm-january", "January" in snap)
             check("r01-vm-back-today", vm_press("Today"))
@@ -232,7 +234,9 @@ def main() -> int:
             for c in checks:
                 check(c["name"], c["ok"], c["detail"])
         else:
-            snap = vb.mcp_state_retry(["month_events"], wait_flag="恢复当日乙改", timeout_s=40)
+            # visible day list carries the titles (month_events dumps vmrefs)
+            state = vb.mcp_state_retry(["today"], wait_flag="2028-02-29")
+            snap = vb.mcp_call("autoui_snapshot")
             check("r04-vm-reopen-visible", "恢复当日乙改" in snap, snap[:150])
             check("r04-vm-next-write", vm_create("重开后首写", "2028-02-29 15:00", "2028-02-29 16:00"))
         lst2 = vb.http_json("GET", "/api/v1/events?from_date=2028-02-01&to_date=2028-03-31")
@@ -313,13 +317,15 @@ def main() -> int:
             for c in checks:
                 check(c["name"], c["ok"], c["detail"])
         else:
-            snap = vb.mcp_state_retry(["today"], wait_flag="存储身份未能证明", timeout_s=40)
-            check("r03-vm-banner", "存储身份未能证明" in snap, snap[:150])
+            state = vb.mcp_state_retry(["recovery_state"], wait_flag="unproven", timeout_s=40)
+            snap = vb.mcp_call("autoui_snapshot")
+            check("r03-vm-banner", "unproven" in state and "存储身份未能证明" in snap,
+                  state[:120] + " | " + snap[:120])
             okc = vm_create("拒绝写入", "2028-02-29 11:00", "2028-02-29 12:00")
-            state = vb.mcp_state_retry(["store_err", "form_open"], wait_flag="recovery_unproven")
+            state = vb.mcp_state_retry(["store_err", "form_open", "f_title"], wait_flag="recovery_unproven")
             check("r03-vm-save-refused", "recovery_unproven" in state and "form_open: true" in state,
                   state[:180].replace(chr(10), " "))
-            check("r03-vm-input-retained", okc and "拒绝写入" in state, state[:150])
+            check("r03-vm-input-retained", okc and "拒绝写入" in state, state[:180])
 
         # ── consent relaunch: banner gone, next real UI write succeeds ────
         vb.kill_all()
