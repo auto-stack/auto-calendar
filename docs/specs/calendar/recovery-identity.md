@@ -37,8 +37,8 @@
 - `seq_high`：曾分配的最大事件 seq，单调不减。
 - `tombstones`：已持久化删除意图的 id；折叠/重建必须排除；仅当该 id 既无
   版本文件也不在 manifest 条目时才可修剪。
-- `generation`：诊断用身份串（`g-new`/`g-v1`/`g-recovered` 派生系）；不参与
-  合同判定。
+- `generation`：诊断用身份串（按因常量 `g-new`/`g-v1`/`g-recovered`，**不保证
+  每 store 唯一**，非合同字段）；不参与合同判定。
 - 内嵌 facade 无 rename/fsync/原子写（auto-lang master 367258e7a 复核）；
   所有提交点为截断重写的小文件，损坏可检测（json_ok + 字段校验）。
 
@@ -46,8 +46,13 @@
 
 | 操作 | 顺序 | 中断点语义 |
 |---|---|---|
-| create/update | ① 版本文件 → ② identity 水位（凭据提交点）→ ③ manifest（可见提交点） | ①后：孤儿文件待折叠；②后：水位领先 manifest，恢复按 max 修复（孤儿并入；文件损坏则 rev 空烧、无假数据） |
-| delete | ① identity 加墓碑（意图提交点）→ ② 删该 id 全部版本文件 → ③ manifest 去条目 rev+1 | ①后：删除不可见、可重试，墓碑已挡复活；②失败：`storage_unwritable`、manifest 不动、墓碑保留（不假成功）；③后：水位由 max 规则补齐 |
+| create/update | ① 版本文件 → ② identity 水位（凭据提交点）→ ③ manifest（可见提交点） | ①后：孤儿文件待折叠——manifest 丢/坏的扫描重建（case B）折叠并入（v1 保全倾向）；identity+manifest 一致的快路径**推迟折叠**（不扫描、孤儿不可见，v1 同源语义），直至下次慢路径或 manifest 丢失才并入，内容可能晚到复活（披露）；②后：水位领先 manifest，恢复按 max 修复（孤儿并入；文件损坏则 rev 空烧、无假数据） |
+| delete | ① identity 加墓碑（意图提交点）→ ② 删该 id 全部版本文件 → ③ manifest 去条目 rev+1 | ①后：删除不可见、可重试，墓碑已挡复活（此窗口内该 id 的变更/删除仍被接受，最终随条目一起消亡——设计如此）；②失败：`storage_unwritable`、manifest 不动、墓碑保留（不假成功）；②后读按 manifest 呈现，缺失文件计 corrupt_count；③后：水位由 max 规则补齐 |
+
+**晚到孤儿披露（v1 同源）**：崩溃于①的孤儿版本文件在快路径下不参与恢复扫描；
+若其 rev 后被新提交复用，随后 manifest 丢失重建时按「每 id 最高 rev 胜」规则
+可能以孤儿内容呈现该 id——单调水位/墓碑/id 不重用三个不变式均不受影响；该
+行为与 v1 一致，属数据保全倾向的边界而非 v2 回归。
 
 ## 4. 恢复分案（store_recover）
 
@@ -55,7 +60,7 @@
 |---|---|---|
 | A | identity + manifest 均有效 | 快路径（水位一致且无墓碑→免扫描）；否则 max(三源) 修复 + 折叠孤儿 + 修剪墓碑 |
 | B | identity 有效，manifest 丢/坏 | 墓碑感知扫描重建，rev=max(水位， 扫描)，seq 同 |
-| C | manifest 有效，identity 丢/坏 | v1 受控迁移：先备份原 manifest 字节，派生水位 max(manifest, 扫描)，墓碑=[]，generation=`g-v1`；每存储至多一次 |
+| C | manifest 有效，identity 丢/坏 | v1 受控迁移：先备份原 manifest 字节，派生水位 max(manifest, 扫描)，墓碑=[]，generation=`g-v1`；备份为覆盖式单文件——identity 再次丢失而 manifest 幸存时 case C 可再次发生，备份随之覆盖为当次原 manifest 字节 |
 | D | 双双丢/坏且 store 有任何痕迹 | **`recovery_unproven` 拒写保全**：读为内存尽力扫描（不落盘），变更全拒，原文件一字不动 |
 | fresh | store 目录不存在（或全空） | 正常初始化（`g-new`，水位 0） |
 

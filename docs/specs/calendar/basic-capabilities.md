@@ -88,9 +88,9 @@
   `invalid_title / invalid_notes / invalid_start / invalid_end / inverted_range /
   not_found / conflict / storage_unwritable / clock_unavailable / invalid_request /
   test_mode_disabled / recovery_unproven`。
-- 规模边界（v2 维持 v1 承诺）：整仓快照式重写 + 线性扫描 + 每变更一次小文件
-  identity 写，数百事件内为设计规模；千级以上需修订（届时可评估 notes 已验证的
-  SQLite 仓储）。
+- 规模边界（v2 维持 v1 承诺）：整仓快照式重写 + 线性扫描 + 每变更一至两次小文件
+  identity 写（delete 为墓碑与水位两笔），数百事件内为设计规模；千级以上需修订
+  （届时可评估 notes 已验证的 SQLite 仓储）。
 
 ## 5. 交互与双端合同（SD-02）
 

@@ -33,11 +33,14 @@
 //     without evidence is strictly distinguished from a new empty store.
 //
 // Crash windows: an incomplete event file is not in the manifest; a crash
-// between ① and ② leaves an orphan revision file that recovery FOLDS IN
-// (data-preserving bias — losing a saved event is worse than resurfacing
-// one). A crash between ② and ③ leaves the watermark ahead of the
-// manifest: the next store_recover repairs the manifest up to the watermark
-// (case A slow path / case B). Tombstoned ids are never folded back in.
+// between ① and ② leaves an orphan revision file that recovery folds in on
+// the next scan-based rebuild (case B / manifest loss — data-preserving
+// bias: losing a saved event is worse than resurfacing one). While manifest
+// and identity stay consistent the case-A fast path defers that fold-in
+// (v1 parity: the orphan stays invisible until a slow-path recovery).
+// A crash between ② and ③ leaves the watermark ahead of the manifest: the
+// next store_recover repairs the manifest up to the watermark (case A slow
+// path / case B). Tombstoned ids are never folded back in.
 //
 // Conflict model: mutations carry expected_rev (global store revision, now
 // watermark-backed); mismatch → "conflict".
@@ -706,15 +709,10 @@ fn merge_entries(entries str, scan_entries str) str {
 // ═══════════════════════════════════════════════════════════
 
 /// Scan events/ (excluding tombstoned ids) into a packed view:
-/// {"entries":[...],"max_rev":N,"max_seq":M,"corrupt":C} — "" when the
-/// events dir is unwritable. Per id the highest revision wins (dir_names is
-/// sorted; revisions zero-padded); unreadable rev-named files count as
-/// corrupt, never silently vanish.
+/// {"entries":[...],"max_rev":N,"max_seq":M,"corrupt":C} — read-only: a
+/// missing events dir yields an empty view, never a created directory
+/// (review F-4: the unproven read path must not touch disk).
 pub fn scan_view(tombstones str) str {
-    var mk bool = fs.mkdir_all(events_dir())
-    if !mk {
-        return ""
-    }
     var names List<str> = fs.dir_names(events_dir())
     var n int = names.len()
     var entries str = "[]"

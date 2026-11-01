@@ -65,7 +65,8 @@ v2 不造事务，改用**持久化单调高水位 + 删除墓碑 + 证据不足
 - `rev_high`：曾持久化确认的最大全局 rev，**单调不减**，是条件写凭据的唯一权威。
 - `seq_high`：曾分配的最大事件 seq，单调不减，是分配器高水位（id 不重用的权威）。
 - `tombstones`：已持久化「删除意图」的 id 列表；折叠恢复必须排除墓碑 id 的残留文件。
-- `generation`：诊断用 store 身份串（创建时刻派生；不参与合同判定）。
+- `generation`：诊断用 store 身份串（按因常量：`g-new`/`g-v1`/`g-recovered`；
+  **不保证每 store 唯一**，非合同字段，不参与任何判定）。
 - 大小 O(墓碑数)，数百事件规模内为 KB 级小文件。
 
 ### 4.2 提交序（无原子原语下的故障安全排序）
@@ -77,10 +78,10 @@ delete：① 写 identity.json 加墓碑（删除意图提交点）→ ② 尽�
 
 | 中断点 | 盘面 | 恢复行为 |
 |---|---|---|
-| ①后（create/update） | 孤儿文件，水位旧 | 折叠并入（v1 保全倾向保留），水位抬到折叠 rev → 旧凭据保持死 |
+| ①后（create/update） | 孤儿文件，水位旧 | case B（manifest 丢/坏）时折叠并入（v1 保全倾向保留）并把水位抬到折叠 rev；identity+manifest 一致的快路径（case A fast）**推迟折叠**（不扫描）——孤儿保持不可见，直至下次慢路径或 manifest 丢失时并入；晚到复活为 v1 同源语义，已在 SD-02 §3 披露。旧凭据保持死 |
 | ②后（create/update） | 水位新、manifest 旧 | manifest 重建取 max(水位， 扫描)；孤儿文件坏也不回退 rev |
 | ①后（delete） | 墓碑已记，文件/manifest 旧 | 读仍见事件（删除未可见）；丢 manifest 时墓碑排除该 id，不复活 |
-| ②后（delete） | 墓碑+部分/全删文件，manifest 旧 | 同上；残留文件永不复活 |
+| ②后（delete） | 墓碑+部分/全删文件，manifest 旧 | 读按 manifest 呈现（缺失文件计 corrupt_count，不视为干净事件）；丢 manifest 时墓碑排除该 id，残留文件永不复活 |
 | identity 写一半损坏 | identity 不可解析 | **走拒写（case D），不回退、不静默重造** |
 
 ### 4.3 manifest_ensure 恢复分案
@@ -90,8 +91,9 @@ delete：① 写 identity.json 加墓碑（删除意图提交点）→ ② 尽�
 - **B：identity 有效 + manifest 丢/坏** — 扫描重建（排除墓碑 id 文件），rev=max(水位， 扫描非墓碑 max)，
   next_seq=max(水位 seq, 扫描 max)+1，写 manifest。
 - **C：identity 丢/坏 + manifest 有效** — 视为 **v1 存储迁移**：read_text+write_text 备份原 manifest 至
-  `store/identity-v1-migration.json`（覆盖式单文件），派生水位=max(man.rev, 扫描)（扫描含 v1 孤儿），
-  墓碑=[], 写 identity.json → 转 A。每存储至多发生一次。
+  `store/identity-v1-migration.json`（覆盖式单文件：identity 再次丢失而 manifest 幸存时，case C 可再次
+  发生并以当前 manifest 字节覆盖旧备份），派生水位=max(man.rev, 扫描)（扫描含 v1 孤儿），
+  墓碑=[], 写 identity.json → 转 A。
 - **D：identity 丢/坏 + manifest 丢/坏 + store 目录存在任何痕迹** — **证据不足，拒写保全**：
   读路径内存态尽力扫描（不落盘、不写 manifest/identity），所有变更返回新 err_code
   `recovery_unproven`，原文件一字不动。全新初始化仅当 store 目录完全不存在（或全空）时走
