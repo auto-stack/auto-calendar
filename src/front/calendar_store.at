@@ -34,6 +34,11 @@ store CalendarStore {
         var day_events []CalEvent = []
         var store_rev int = 0
         var store_err str = ""
+        // CALENDAR-002: recovery/conflict contract surface — "ok" | "unproven";
+        // unproven = evidence-insufficient store, writes refused server-side,
+        // the UI shows the explicit preservation banner (never fake data).
+        var recovery_state str = "ok"
+        var generation str = ""
         var form_open bool = false
         var form_mode str = "create"
         var form_id str = ""
@@ -121,6 +126,8 @@ store CalendarStore {
             if lst.ok {
                 .month_events = lst.events
                 .store_rev = lst.rev
+                .recovery_state = lst.recovery_state
+                .generation = lst.generation
             } else {
                 .store_err = lst.err_code
             }
@@ -141,6 +148,8 @@ store CalendarStore {
                 .month_events = lst.events
                 .store_rev = lst.rev
                 .store_err = ""
+                .recovery_state = lst.recovery_state
+                .generation = lst.generation
             } else {
                 .store_err = lst.err_code
             }
@@ -157,6 +166,8 @@ store CalendarStore {
                 .month_events = lst.events
                 .store_rev = lst.rev
                 .store_err = ""
+                .recovery_state = lst.recovery_state
+                .generation = lst.generation
             } else {
                 .store_err = lst.err_code
             }
@@ -184,6 +195,8 @@ store CalendarStore {
             if lst.ok {
                 .month_events = lst.events
                 .store_rev = lst.rev
+                .recovery_state = lst.recovery_state
+                .generation = lst.generation
             } else {
                 .store_err = lst.err_code
             }
@@ -201,6 +214,8 @@ store CalendarStore {
                 .day_events = day.events
                 .store_rev = day.rev
                 .store_err = ""
+                .recovery_state = day.recovery_state
+                .generation = day.generation
             } else {
                 .store_err = day.err_code
             }
@@ -208,15 +223,20 @@ store CalendarStore {
 
         .CreateEvent(title, start, end, notes) -> {
             var r = event_create(title, start, end, notes)
-            .store_rev = r.rev
             .store_err = r.err_code
+            if r.err_code == "recovery_unproven" {
+                .recovery_state = "unproven"
+            }
             if r.ok {
+                .store_rev = r.rev
                 var first = .FmtDate(.year, .month, 1)
                 var last = .FmtDate(.year, .month, .DaysInMonth(.year, .month))
                 var lst = events_list(first, last)
                 if lst.ok {
                     .month_events = lst.events
                     .store_rev = lst.rev
+                    .recovery_state = lst.recovery_state
+                    .generation = lst.generation
                 }
                 var day = events_list(.selected_date, .selected_date)
                 if day.ok {
@@ -227,15 +247,20 @@ store CalendarStore {
 
         .UpdateEvent(id, expected_rev, title, start, end, notes) -> {
             var r = event_update(id, expected_rev, title, start, end, notes)
-            .store_rev = r.rev
             .store_err = r.err_code
+            if r.err_code == "recovery_unproven" {
+                .recovery_state = "unproven"
+            }
             if r.ok {
+                .store_rev = r.rev
                 var first = .FmtDate(.year, .month, 1)
                 var last = .FmtDate(.year, .month, .DaysInMonth(.year, .month))
                 var lst = events_list(first, last)
                 if lst.ok {
                     .month_events = lst.events
                     .store_rev = lst.rev
+                    .recovery_state = lst.recovery_state
+                    .generation = lst.generation
                 }
                 var day = events_list(.selected_date, .selected_date)
                 if day.ok {
@@ -246,15 +271,20 @@ store CalendarStore {
 
         .DeleteEvent(id, expected_rev) -> {
             var r = event_delete(id, expected_rev)
-            .store_rev = r.rev
             .store_err = r.err_code
+            if r.err_code == "recovery_unproven" {
+                .recovery_state = "unproven"
+            }
             if r.ok {
+                .store_rev = r.rev
                 var first = .FmtDate(.year, .month, 1)
                 var last = .FmtDate(.year, .month, .DaysInMonth(.year, .month))
                 var lst = events_list(first, last)
                 if lst.ok {
                     .month_events = lst.events
                     .store_rev = lst.rev
+                    .recovery_state = lst.recovery_state
+                    .generation = lst.generation
                 }
                 var day = events_list(.selected_date, .selected_date)
                 if day.ok {
@@ -314,16 +344,22 @@ store CalendarStore {
         .SaveForm -> {
             if .form_mode == "edit" {
                 var r = event_update(.form_id, .form_rev, .f_title, .f_start, .f_end, .f_notes)
-                .store_rev = r.rev
                 .store_err = r.err_code
+                if r.err_code == "recovery_unproven" {
+                    .recovery_state = "unproven"
+                }
                 if r.ok {
+                    .store_rev = r.rev
                     .form_open = false
                 }
             } else {
                 var r = event_create(.f_title, .f_start, .f_end, .f_notes)
-                .store_rev = r.rev
                 .store_err = r.err_code
+                if r.err_code == "recovery_unproven" {
+                    .recovery_state = "unproven"
+                }
                 if r.ok {
+                    .store_rev = r.rev
                     .form_open = false
                 }
             }
@@ -334,6 +370,8 @@ store CalendarStore {
                 if lst.ok {
                     .month_events = lst.events
                     .store_rev = lst.rev
+                    .recovery_state = lst.recovery_state
+                    .generation = lst.generation
                 }
                 var day = events_list(.selected_date, .selected_date)
                 if day.ok {

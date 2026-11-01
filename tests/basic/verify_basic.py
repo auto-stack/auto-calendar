@@ -128,12 +128,15 @@ def app_env(data_dir, fake_date=None, fake_time=None, fake_off=None):
     return env
 
 
-def launch_app(profile, data_dir, log_path, fake_date=None, fake_time=None, fake_off=None):
+def launch_app(profile, data_dir, log_path, fake_date=None, fake_time=None, fake_off=None,
+               extra_env=None):
     if profile == "vm":
         cmd = [AUTO_BIN, "run", "-r", "vm"]
     else:
         cmd = [AUTO_BIN, "run"]
     env = app_env(data_dir, fake_date, fake_time, fake_off)
+    if extra_env:
+        env.update(extra_env)
     env["AUTOUI_MCP_PORT"] = str(MCPPORT)
     log = open(log_path, "w", encoding="utf-8")
     proc = subprocess.Popen(cmd, cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT)

@@ -88,6 +88,16 @@ widget App {
                         }
                     }
 
+                    // CALENDAR-002: evidence-insufficient store — explicit
+                    // preservation state, writes refused server-side (AC-02).
+                    if .store.recovery_state == "unproven" {
+                        col {
+                            style: "w-full text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded-md px-2 py-1.5 mt-2 gap-0.5"
+                            text "存储身份未能证明（恢复证据缺失或损坏），写入已拒绝，原数据已保全。" { style: "text-xs text-destructive font-semibold" }
+                            text "如确认接受扫描恢复，请以 AUTO_CALENDAR_RECOVERY_CONSENT=accept-scan 重启应用。" { style: "text-xs text-muted-foreground" }
+                        }
+                    }
+
                     // Store error banner (transient, non-fatal)
                     if .store.store_err != "" {
                         text f"操作失败：${.store.store_err}" { style: "w-full text-xs text-destructive bg-destructive/10 rounded-md px-2 py-1 mt-2" }
@@ -207,8 +217,12 @@ widget App {
                                     style: "w-full h-16 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary resize-none"
                                 }
                             }
-                            if .store.store_err != "" {
-                                text f"保存失败：${.store.store_err}（输入已保留，请修正后重试）" { style: "text-xs text-destructive" }
+                            if .store.store_err == "recovery_unproven" {
+                                text "保存失败：存储身份未能证明，写入已拒绝（输入已保留）。请以 AUTO_CALENDAR_RECOVERY_CONSENT=accept-scan 重启以受控恢复。" { style: "text-xs text-destructive" }
+                            } else {
+                                if .store.store_err != "" {
+                                    text f"保存失败：${.store.store_err}（输入已保留，请修正后重试）" { style: "text-xs text-destructive" }
+                                }
                             }
                             row {
                                 style: "w-full justify-end gap-2 pt-1"
