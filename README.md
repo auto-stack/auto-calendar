@@ -2,9 +2,9 @@
 
 日历，使用 AutoLang / AutoUI 开发的独立应用。
 
-更新：2026-11-01。002 已实施（T-00..T-05）：恢复身份 v2（水位/墓碑/拒写保全）
-落地，F-5 恢复后 rev 回退窗口关闭；门全绿（recovery vue 31/31、vm 28/28；
-001 基本门 vue 19/19、vm 11/11；深电池 30/30）， awaiting 独立复审。墙钟合同不变。
+更新：2026-11-02。002 已交付归档/r1：恢复身份 v2（水位/墓碑/拒写保全）生效，
+F-5 恢复后 rev 回退窗口关闭；门全绿（recovery vue 31/31、vm 28/28；
+001 基本门 vue 19/19、vm 11/11；深电池 30/30），独立终审两轮通过。墙钟合同不变。
 
 ## 运行
 
@@ -41,8 +41,10 @@ AutoOS 通过 [`apps/auto-calendar`](https://github.com/auto-stack/auto-os/tree/
 开发使用独立 clone `D:/autostack/auto-calendar` 的 main；AutoOS 内对应子模块仅固定已交付提交，流程见 [App开发与子模块](https://github.com/auto-stack/auto-os/blob/main/docs/design/strategy/app-submodule-workflow.md)。
 
 
-## 当前后续计划（2026-11-01）
+## 当前后续计划（2026-11-02）
 
-[CALENDAR-002：恢复后版本凭据与删除保全](docs/plans/002-recovery-revision-and-deletion.md) 为 **r1、实施完成（6/8，T-06 复审 / T-07 归档待行）**。恢复身份 v2 已落地：`store/identity.json` 单调水位（rev_high/seq_high）+ 删除墓碑 + 证据不足拒写（`recovery_unproven` 只读保全态，唯一出口 `AUTO_CALENDAR_RECOVERY_CONSENT=accept-scan` 受控恢复）+ v1 迁移先备份。规范见 [docs/specs/calendar/recovery-identity.md](docs/specs/calendar/recovery-identity.md) 与 [basic-capabilities.md](docs/specs/calendar/basic-capabilities.md) §4（r2 修订稿随 merge 生效）。
+[CALENDAR-002：恢复后版本凭据与删除保全](docs/plans/archived/002-recovery-revision-and-deletion.md) 已交付归档（r1，复审通过，2026-11-02）。恢复身份 v2 已生效：`store/identity.json` 单调水位（rev_high/seq_high）+ 删除墓碑 + 证据不足拒写（`recovery_unproven` 只读保全态，唯一出口 `AUTO_CALENDAR_RECOVERY_CONSENT=accept-scan` 受控恢复）+ v1 迁移先备份。规范见 [docs/specs/calendar/recovery-identity.md](docs/specs/calendar/recovery-identity.md) 与 [basic-capabilities.md](docs/specs/calendar/basic-capabilities.md) §4（已生效）。
 
-[路线图](docs/roadmap-v0.6.md) · [现实现规范](docs/specs/calendar/basic-capabilities.md)。开发与顺序复审在D:/autostack/auto-calendar独立clone main，一app一写入者；不在OS组合子模块开发，不建junction/symlink。不更新AutoOS pin；各app独立验收后由统一OS计划装配，Linux仍WAIT_DISTRO_M1。
+下一步（另会话）：AutoOS 统一装配接收本仓已推送交付提交（gitlink/总表/detach，见归档计划 §10 移交项）；重复规则、提醒、CalDAV、DST 时刻语义另排，保持墙钟语义；Linux 仍 WAIT_DISTRO_M1。
+
+[路线图](docs/roadmap-v0.6.md) · [现实现规范](docs/specs/calendar/basic-capabilities.md) · [恢复身份规范](docs/specs/calendar/recovery-identity.md)。开发使用独立 clone `D:/autostack/auto-calendar` 的 main；AutoOS 内对应子模块仅固定已交付提交，流程见 [App开发与子模块](https://github.com/auto-stack/auto-os/blob/main/docs/design/strategy/app-submodule-workflow.md)。

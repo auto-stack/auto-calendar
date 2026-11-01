@@ -1,6 +1,6 @@
 ---
 plan_id: CALENDAR-002
-status: reviewed
+status: archived
 feature_name: "恢复后版本凭据与删除保全"
 author: [Codex]
 created_at: 2026-11-01
@@ -131,8 +131,10 @@ review独立上下文必须核对C-01/C-02的新旧写者身份、文件状态�
 - [x] T-05（owner_stage=work；依赖T-04；AC-01..04）：核对漂移/覆盖和README/roadmap，提交execution_done。
   - [✅ 已完成] 漂移核对：§4 六文件中 4 个按计划授权变更（上表 11 项含新增，无计划外漂移；git log 无越权文件）。覆盖核对：AC-01=t01 探针 5/5+各门 ports-free/cleanup clean；AC-02=c01-stale-refused（冷重启后 rev=8、陈旧 conflict）+c03 拒写/consent/再写（双轨+深电池 30/30）；AC-03=c02 id 不重用/全删 rev=6 vs 新空 0/墓碑压残留（双轨）；AC-04=旧门 vue 19/19 + vm 11/11（墙钟/重开/输入保留零回归）+C-04 中文跨月 CRUD/强杀重开（id 与墙钟字段逐字节稳定）+SD 候选与 README/roadmap 一致。AC-05=review 持有、AC-06=merge 持有（pending，不标记完成）。README/roadmap 已同步 002 实施态与新验收入口。
   - [修复轮 r1-review] README 计数措辞改"门全绿"分族列报；roadmap 无需变更（措辞本就准确）。
-- [ ] T-06（owner_stage=review；依赖T-05；AC-05）：同clone独立上下文最终复审。
-- [ ] T-07（owner_stage=merge；依赖T-06 pass；AC-06）：仅app规范/归档/提交push收尾。
+- [x] T-06（owner_stage=review；依赖T-05；AC-05）：同clone独立上下文最终复审。
+  - [✅ 已完成] 独立 fresh 子代理终审两轮：首轮 764380e needs_fix（F-1..F-5，AC-01..04 全 pass 自有 60 探针+两门重放）；修复轮 1d30fa9 **pass**——F-1..F-5 逐项闭环双验证（probe4/probe5 于修复码重建：快路径推迟折叠实演、unproven 读全树字节零变更、缺 events 目录空视图落水位合同、迁移备份字节相等），无新增发现，AC-01..04 沿用。证据：plan-artifacts/plan-002/review/final-review-report.md。
+- [x] T-07（owner_stage=merge；依赖T-06 pass；AC-06）：仅app规范/归档/提交push收尾。
+  - [✅ 已完成] 见 §9 merge 收据：canonical 两文档随实现已在 main（22503e8 备/1d30fa9 修），归档+push+plan-artifacts 整删+registry 刷新；OS pin 移交显式记录（本仓不可代行）。
 
 ## 9. 复审记录
 
@@ -145,6 +147,7 @@ review独立上下文必须核对C-01/C-02的新旧写者身份、文件状态�
 - stage: work | plan_id: CALENDAR-002 | plan_revision: 1 | outcome: pass（execution_done） | worktree_path: D:/autostack/auto-calendar | branch: main | base_commit: 22503e8 | code_commit: 见T-05提交（文档同步，产品代码冻结于 22503e8） | dependency_revisions: auto CLI 0.1.0+plan-890-verified-r7-t19-5-g55c98c7（sha256 390e664e…）；auto-lang master 367258e7a（只读） | task_ids: T-05 | readiness: 工作面 AC-01..04 全部绑定实测断言（rec-vue 31/31、rec-vm 28/28、basic-vue 19/19、basic-vm 11/11、深电池 30/30，终态代码）；开放契约发现=无；受影响旧用例回放=basic 双 profile 即旧门全量；测试=四门族+三探针，本轮修复仅探针 oracle（vm 5 处），产品代码自 22503e8 前无变更；统一回归门 pending（owner=复审/merge，按仓工作流） | evidence=本文件§4漂移表+§8 T-05行+attachments/002 各 verify JSON（local-only） | blockers=无 | next_responsible_role=review（T-06 final review, review_scope=final）。
 - stage: work | plan_id: CALENDAR-002 | plan_revision: 1 | outcome: pass（F-1..F-5 有界修复轮） | worktree_path: D:/autostack/auto-calendar | branch: main | base_commit: 204d36f | code_commit: 见修复轮提交（repository.at scan_view 一行码+头注；其余全为文档措辞） | dependency_revisions: 同前 | task_ids: T-00/T-02/T-04/T-05(重开，修复范围) | findings_closure: F-1→决策稿§4.2+repository.at头注+SD-02§3披露对齐快路径推迟折叠（设计不变式零变更，v1同源语义显式披露）；F-2→迁移改"覆盖式可再发生"（决策稿+SD-02）；F-3→generation 按因常量披露（决策稿+SD-02）；F-4→scan_view 去 mkdir_all+专项探针 PASS（unproven 读零目录创建）；F-5→basic-capabilities §4 两笔措辞；注记→delete②后 corrupt_count 措辞、README 分族计数 | evidence=plan-artifacts/plan-002/evidence/t02-replay-20261102-001500.json（修复码全电池 30/30）+f4-closure.json | blockers=无 | next_responsible_role=review（受影响范围复审）。
 - stage: review | review_scope: final（受影响范围复审） | reviewer_identity: 同一独立 fresh 子代理（延续首轮会话，跨轮记忆仅限其自有审查工件；限制同前：Windows-only、UI 证据经提交 harness/驱动） | plan_id: CALENDAR-002 | plan_revision: 1 | outcome: pass | worktree_path: D:/autostack/auto-calendar | branch: main | reviewed_commit: 1d30fa9 | base_commit: 764380e（首轮终审基线） | dependency_revisions: 同前 | spec_inputs: basic-capabilities.md §4 r2 + recovery-identity.md（F-1..F-5 措辞对齐后版本） | acceptance_results: F-1..F-5 逐项闭环双验证（复审者自有 probe4/probe5 于修复码重建：快路径推迟折叠实演、unproven 读全树字节零变更、缺 events 目录空视图走水位合同、迁移备份字节相等）；AC-01..04 沿用首轮结论（产品增量仅读路径 mkdir 移除，复审者直接探明新行为落水位合同）；AC-05=本复审 pass；AC-06 pending（merge） | pending_closeout_gates: 统一回归门（merge 持有） | findings: 无新增（修复 diff 恰定域：scan_view+头注+五文档；无 ledger 写入；树 clean） | evidence: D:/autostack/plan-artifacts/plan-002/review/final-review-report.md（re-review 记录+probe_review4/5+JSON） | next: merge（T-07）。
+- stage: merge | plan_id: CALENDAR-002:r1 | outcome: pass | delivery_commit: 1d30fa9（产品代码终态）| main tip: 归档簿记提交 | prepared: 开发按§2直接在独立clone main进行（无开发分支/worktree，landing 无 ff/rebase 步骤；默认分支 tip 即交付线） | landed: 默认分支 tip=交付线（线性历史，无 merge commit；`git log --oneline` 53587a4..归档tip 全链可溯） | canonical_verified: docs/specs/calendar/basic-capabilities.md（§4 r2 修订，sha256 d100777e3cf178c9…）+ docs/specs/calendar/recovery-identity.md（新增，sha256 bba8bf3c450628f5…）@ 归档 tip；SD-01/SD-02 与实现一致经终审逐条核对（修订稿 22503e8 落、1d30fa9 对齐 F-1..F-5） | archived: docs/plans/archived/002-recovery-revision-and-deletion.md（status: archived，git mv，簿记随 default 分支提交） | cleaned: 无 worktree/分支可清（§2 独立clone纪律，wt-guard 不适用）；plan-artifacts/plan-002 整删（证据先折叠：红基线 t00-repro-20261101-223021.json、修复码全电池 t02-replay-20261102-001500.json 30/30、F-4 专项 f4-closure.json、复审报告 review/final-review-report.md 两轮+probe JSON、门运行摘要数字已录本文件§8/§9）；registry D:/autostack/plan-artifacts/.retention/policy.json 已刷新 auto-calendar/CALENDAR-002 条目（deleted_scopes=[plan-002]，无 holds） | landing_checks: 本app为按需运行（`auto run` 即构建即运行，无独立 release 守护/构建产物），无 stale artifact 可记；统一回归门=四门族已在终态代码全绿（本文件§8 T-04/T-05），merge 无独立批量回归机制（本仓无 .last-batch-regression.json，非 auto-lang 约定）；OS 侧移交见 §10（gitlink/总表/detach，owner=AutoOS 统一计划） | push: origin/main ff 推送（AC-06） | next: done。
 - stage: goal | plan_id: CALENDAR-002 | plan_revision: 1 | round: 1 | from: drafting | to: work | status: execution_done | outcome: pass | worktree: D:/autostack/auto-calendar（独立clone main，按计划§2覆盖默认worktree规约） | commit: 25070e6 | next: review（授权链：用户 /goal 经 auto-plan-goal 一线授权 work→review→bounded repair→merge；T-00..T-05 六提交 53587a4..25070e6，四门族全绿，统一回归门 pending owner=review/merge）。
 - stage: goal | plan_id: CALENDAR-002 | plan_revision: 1 | round: 2 | from: work | to: review | status: execution_done | outcome: pass | worktree: D:/autostack/auto-calendar（独立clone main） | commit: 764380e | next: review（终审基线 764380e，树 clean，代码 diff 基线 3db7cdd）。
 - stage: goal | plan_id: CALENDAR-002 | plan_revision: 1 | round: 3 | from: review | to: work | status: executing | outcome: needs_fix | worktree: D:/autostack/auto-calendar | commit: 204d36f | next: work（有界修复 F-1..F-5，修复轮提交 1d30fa9）。
@@ -155,3 +158,5 @@ review独立上下文必须核对C-01/C-02的新旧写者身份、文件状态�
 ## 10. 待澄清事项
 
 当前没有需要用户重复确认的产品方向。技术不确定性由T-00记录真实证据、owner与依赖任务；若需要改变目标、削减必需验收或扩大跨仓写入范围，先明确报告，受影响任务保持未完成。归档/merge只完成本app的Spec/计划/提交push与自有临时产物收尾，不更新AutoOS gitlink、manifest或.gitmodules；后续OS统一计划接收已单独验证的固定SHA。
+
+归档移交项（owner=AutoOS 侧统一计划，本仓不可代行）：apps/auto-calendar gitlink 更新至本计划交付提交（当前 main tip，含 1d30fa9 代码线）；B类总表行刷新为已交付；子模块显式 detach 流程沿 001 先例。
