@@ -20,8 +20,11 @@ behaviors:
 
 Isolation: each run uses its own data dir under a temp root and explicit
 ports (front 17820, back 17821); occupied ports abort the run (never
-silently drift). Evidence (commands, results, failures) is written to
-docs/plans/attachments/001/verify-<profile>-<ts>.json (local-only).
+silently drift). CALENDAR-002 T-01: process cleanup is OWN-PROCESS ONLY —
+pids are harvested solely after positive ownership identification
+(tests/free_ports.py Ownership); bystanders are reported, never killed.
+Evidence (commands, results, failures) is written to
+docs/plans/attachments/002/verify-<profile>-<ts>.json (local-only).
 """
 from __future__ import annotations
 
@@ -41,13 +44,19 @@ import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, "..", ".."))
+sys.path.insert(0, os.path.normpath(os.path.join(HERE, "..")))
+import free_ports as fpg  # noqa: E402  (own-process ownership gate, T-01)
+
 AUTO_BIN = os.environ.get("AUTO_BIN", r"D:\autostack\auto-man\target\debug\auto.exe")
 FRONT_PORT = 17820
 BACK_PORT = 17821
 API = f"http://127.0.0.1:{BACK_PORT}"
 FRONT = f"http://localhost:{FRONT_PORT}"
-EVIDENCE_DIR = os.path.join(REPO, "docs", "plans", "attachments", "001")
+EVIDENCE_DIR = os.path.join(REPO, "docs", "plans", "attachments", "002")
 MCPPORT = 9547
+HARNESS_START = time.time()
+OWNED = fpg.Ownership(REPO, HARNESS_START, (FRONT_PORT, BACK_PORT))
+LAST_CLEANUP: dict = {}
 
 
 class Check:
@@ -71,23 +80,6 @@ class Check:
 def port_free(port):
     with socket.socket() as s:
         return s.connect_ex(("127.0.0.1", port)) != 0
-
-
-def free_ports(ports=(FRONT_PORT, BACK_PORT)):
-    import ctypes
-
-    out = subprocess.run(["netstat", "-ano"], capture_output=True, text=True).stdout
-    pids = set()
-    for line in out.splitlines():
-        parts = line.split()
-        if len(parts) >= 5 and parts[3].upper() == "LISTENING":
-            m = re.search(r":(\d+)$", parts[1])
-            if m and int(m.group(1)) in ports:
-                pids.add(int(parts[4]))
-    for pid in sorted(pids):
-        subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True)
-    time.sleep(1.5)
-    return all(port_free(p) for p in ports)
 
 
 def http_json(method, path, payload=None, timeout=10):
@@ -144,7 +136,9 @@ def launch_app(profile, data_dir, log_path, fake_date=None, fake_time=None, fake
     env = app_env(data_dir, fake_date, fake_time, fake_off)
     env["AUTOUI_MCP_PORT"] = str(MCPPORT)
     log = open(log_path, "w", encoding="utf-8")
-    return subprocess.Popen(cmd, cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT)
+    proc = subprocess.Popen(cmd, cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT)
+    OWNED.register_tree(proc.pid)  # own-process discipline: this run created it
+    return proc
 
 
 def wait_ready(profile, log_path):
@@ -164,6 +158,8 @@ def wait_ready(profile, log_path):
             except Exception:
                 time.sleep(1)
         return False, "autoui MCP not reachable"
+    # stack is up: positively identify our backend/front listeners (T-01)
+    OWNED.register_from_ports()
     return True, ""
 
 
@@ -210,13 +206,12 @@ def mcp_state_retry(fields, wait_flag=None, timeout_s=40):
 
 
 def kill_all():
-    subprocess.run(["taskkill", "/F", "/IM", "auto.exe"], capture_output=True)
-    subprocess.run(["taskkill", "/F", "/IM", "auto-calendar-back.exe"], capture_output=True)
-    # orphan vite (node) survives its parent and holds the front port — the
-    # dedicated cleaner also kills calendar node processes and verifies free
-    subprocess.run([sys.executable, os.path.join(HERE, "..", "free_ports.py")],
-                   capture_output=True)
-    time.sleep(1.5)
+    """Own-process harvest only (T-01): kills registered pids/trees; any
+    listener not positively owned is a bystander — reported, never killed."""
+    global LAST_CLEANUP
+    LAST_CLEANUP = OWNED.harvest()
+    if not LAST_CLEANUP.get("clean", False):
+        print(f"CLEANUP-NOT-CLEAN {json.dumps(LAST_CLEANUP)}")
 
 
 def restart_with_clock(profile, data_dir, log_path, date, clock_time, off):
@@ -246,7 +241,7 @@ def run_node_phase(phase):
 def fresh_data_dir(profile):
     """F-1: every run gets its own empty data dir (permanent replay must be
     re-runnable; a reused store makes the fresh-store assertions false-red)."""
-    base = tempfile.mkdtemp(prefix=f"cal001-{profile}-")
+    base = tempfile.mkdtemp(prefix=f"cal002-{profile}-")
     data_dir = os.path.join(base, "data")
     os.makedirs(data_dir, exist_ok=True)
     return data_dir
@@ -255,7 +250,8 @@ def fresh_data_dir(profile):
 def run_vue(check):
     data_dir = fresh_data_dir("vue")
     log_path = os.path.join(log_dir_for_run(), "verify-vue-app.log")
-    check("ports-free", free_ports(), f"front {FRONT_PORT} / back {BACK_PORT}")
+    check("ports-free", all(port_free(p) for p in (FRONT_PORT, BACK_PORT)),
+          f"front {FRONT_PORT} / back {BACK_PORT}")
 
     # V-01/V-02/V-03 main phase on the injected leap-day clock
     proc = launch_app("vue", data_dir, log_path, fake_date="2028-02-29", fake_time="08:30", fake_off=0)
@@ -297,7 +293,8 @@ def run_vm(check):
     data_dir = fresh_data_dir("vm")
     log_dir = log_dir_for_run()
     log_path = os.path.join(log_dir, "verify-vm-app.log")
-    check("ports-free", free_ports(), f"front {FRONT_PORT} / back {BACK_PORT}")
+    check("ports-free", all(port_free(p) for p in (FRONT_PORT, BACK_PORT)),
+          f"front {FRONT_PORT} / back {BACK_PORT}")
 
     proc = launch_app("vm", data_dir, log_path, fake_date="2028-02-29", fake_time="08:30", fake_off=0)
     try:
@@ -387,7 +384,11 @@ def main():
         print(f"auto CLI not found at {AUTO_BIN} (set AUTO_BIN)")
         return 2
     if not all(port_free(p) for p in (FRONT_PORT, BACK_PORT)):
-        print(f"ports {FRONT_PORT}/{BACK_PORT} occupied — run tests/free_ports.py or free them; refusing to drift")
+        found = fpg.listeners((FRONT_PORT, BACK_PORT))
+        for port, pid in sorted(found.items()):
+            info = fpg.proc_info(pid) or {}
+            print(f"OCCUPIED port {port} pid {pid} image {info.get('image', '?')} — "
+                  f"free them yourself; this run never kills non-owned processes")
         return 2
 
     os.makedirs(EVIDENCE_DIR, exist_ok=True)
@@ -405,6 +406,14 @@ def main():
             json.dump({"profile": args.profile, "ts": ts,
                        "auto_bin": AUTO_BIN,
                        "auto_bin_sha256": hashlib.sha256(open(AUTO_BIN, "rb").read()).hexdigest(),
+                       "auto_version": subprocess.run([AUTO_BIN, "--version"],
+                                                      capture_output=True, text=True).stdout.strip(),
+                       "node_version": subprocess.run(["node", "--version"],
+                                                      capture_output=True, text=True).stdout.strip(),
+                       "own_process_discipline": "pids harvested only after positive ownership "
+                                                 "identification (tests/free_ports.py Ownership); "
+                                                 "bystanders reported, never killed",
+                       "cleanup": LAST_CLEANUP,
                        "results": check.results,
                        "summary": check.summary,
                        "elapsed_s": round(time.time() - started, 1)}, fh, ensure_ascii=False, indent=1)
