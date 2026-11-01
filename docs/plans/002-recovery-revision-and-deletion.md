@@ -1,6 +1,6 @@
 ---
 plan_id: CALENDAR-002
-status: drafting
+status: execution_done
 feature_name: "恢复后版本凭据与删除保全"
 author: [Codex]
 created_at: 2026-11-01
@@ -57,6 +57,22 @@ Spec§4/F-5已登记全局rev回退：manifest_recover仅从幸存事件取max_r
 | `tests/basic/verify_basic.py` | `f34e7cba4c2cbc39f9dcfd7cb6fcd81ebded726af41e8d72d6e10a7c7432d717` |
 | `tests/free_ports.py` | `fc43c9794c5bed64dc55534cb86e2093de541d3a5fe266ffd7320fcb57a1c6b4` |
 
+实施漂移核对（T-05，全部为计划授权变更，无计划外漂移）：
+
+| 文件 | r1 基线 hash → 实施 hash (sha256 前位) | 变更来源 |
+|---|---|---|
+| docs/specs/calendar/basic-capabilities.md | 91774a5f → 00917b72 | SD-01（§4 r2 修订+§5/§6 入口） |
+| src/back/repository.at | 9ee22b87 → a87122c3 | T-02 v2 协议 |
+| src/back/db.at | cbb89934 → 765f3bc7 | T-02 五入口改门 |
+| src/front/calendar_store.at | 2f1fd2eb → 3ab194ac | T-03 recovery_state 消费 |
+| tests/basic/verify_basic.py | f34e7cba → 90b3a013 | T-01 自有进程收窄 + extra_env |
+| tests/free_ports.py | fc43c979 → f994078a | T-01 所有权门重写 |
+| src/back/api.at | （新增字段）→ 2ede8df8 | T-02 recovery_state/generation |
+| src/front/app.at | → 1b261736 | T-03 保全横幅/拒写文案 |
+| tests/basic/recovery_driver.mjs | 新文件 d6f2a54e | T-03 |
+| tests/basic/verify_recovery_identity.py | 新文件 45372414 | T-03/T-04 |
+| docs/specs/calendar/recovery-identity.md | 新文件 32dd603f | SD-02 候选 |
+
 ## 5. 详细设计
 
 T-00新增 `docs/plans/evidence/002/recovery-decision.md`：复现F-5与最高ID/全删状态；确定可验证的版本身份、删除事实、分配器高水位及v1迁移。实现前冻结每个持久化步骤的成功/中断/拒写选择、支持资源规模和可靠原语；保留数百事件规模，不能宣称无限/掉电原子性。
@@ -109,7 +125,8 @@ review独立上下文必须核对C-01/C-02的新旧写者身份、文件状态�
   - [✅ 已完成] calendar_store.at 增 recovery_state/generation 字段，Init/月导航/SelectDay/三变更/SaveForm 全路径捕获列表态，recovery_unproven 失败时置 unproven 且不动 store_rev；app.at 增保全横幅（unproven 显式态+consent 指引）与表单专用拒写文案（输入保留不变）。新增 tests/basic/recovery_driver.mjs（seed/restart/unproven/consent 四相）与 tests/basic/verify_recovery_identity.py（双 profile 永久入口：C-01/02 HTTP 反例+C-03 UI 面+C-04 中文跨月 CRUD/强杀重开/墙钟不改/下一次写入+consent 后真实 UI 写入），verify_basic.launch_app 增 extra_env。vue 轨 31/31（r04 墙钟字段与 id 稳定、r03 横幅+拒写+保稿、c01/c02 反例、c03 consent 重锚+4事件保全），清理 clean。证据：docs/plans/attachments/002/verify-rec-vue-20261101-231622.json（local-only）。
 - [x] T-04（owner_stage=work；依赖T-03；AC-04）：使补充入口可执行，跑C-01..05、旧墙钟/事件门及真实故障反控，准备SD候选。
   - [✅ 已完成] 双轨补充入口可执行：verify_recovery_identity.py --profile vue|vm（vm 轨 MCP 驱动；首轮 23/28 暴露 5 处探针 oracle 缺陷——编辑按首行、双次"<"跨过一月、month_events 渲染为 vmref、横幅/f_title 查错字段——修复后 28/28，产品零改动）。总门：recovery vue 31/31 + vm 28/28；旧门 verify_basic vue 19/19 + vm 11/11（001 墙钟/事件/重开合同无回归）；深电池 probe_t02_replay 30/30（真实冷重启、迁移备份字节、consent 报告）。旧 max 策略反控=c01-stale-refused/c02-id-not-reissued 断言（旧策略必红）。SD 候选已备：basic-capabilities.md §4 r2 修订稿 + 新 recovery-identity.md（canonical 候选，随 merge 生效）。证据：attachments/002/verify-rec-{vue-20261101-231622,vm-20261101-234520}.json、verify-{vue-20261101-232913,vm-20261101-233228}.json（local-only）、plan-artifacts/plan-002/evidence/t02-replay-20261101-233229.json。
-- [ ] T-05（owner_stage=work；依赖T-04；AC-01..04）：核对漂移/覆盖和README/roadmap，提交execution_done。
+- [x] T-05（owner_stage=work；依赖T-04；AC-01..04）：核对漂移/覆盖和README/roadmap，提交execution_done。
+  - [✅ 已完成] 漂移核对：§4 六文件中 4 个按计划授权变更（上表 11 项含新增，无计划外漂移；git log 无越权文件）。覆盖核对：AC-01=t01 探针 5/5+各门 ports-free/cleanup clean；AC-02=c01-stale-refused（冷重启后 rev=8、陈旧 conflict）+c03 拒写/consent/再写（双轨+深电池 30/30）；AC-03=c02 id 不重用/全删 rev=6 vs 新空 0/墓碑压残留（双轨）；AC-04=旧门 vue 19/19 + vm 11/11（墙钟/重开/输入保留零回归）+C-04 中文跨月 CRUD/强杀重开（id 与墙钟字段逐字节稳定）+SD 候选与 README/roadmap 一致。AC-05=review 持有、AC-06=merge 持有（pending，不标记完成）。README/roadmap 已同步 002 实施态与新验收入口。
 - [ ] T-06（owner_stage=review；依赖T-05；AC-05）：同clone独立上下文最终复审。
 - [ ] T-07（owner_stage=merge；依赖T-06 pass；AC-06）：仅app规范/归档/提交push收尾。
 
@@ -121,6 +138,7 @@ review独立上下文必须核对C-01/C-02的新旧写者身份、文件状态�
 - stage: work | plan_id: CALENDAR-002 | plan_revision: 1 | outcome: pass | worktree_path: D:/autostack/auto-calendar | branch: main | base_commit: 67b5827 | code_commit: 见T-02提交 | dependency_revisions: 同T-00 | task_ids: T-02 | evidence=plan-artifacts/plan-002/evidence/t02-replay-20261101-225947.json（30/30：C-01..03全绿+R0/S5/S9控制，含真实冷重启与consent重启两轮进程级注入）+ src/back/{repository,db,api}.at（v2协议实现） | blockers=无 | next_responsible_role=work（T-03）。
 - stage: work | plan_id: CALENDAR-002 | plan_revision: 1 | outcome: pass | worktree_path: D:/autostack/auto-calendar | branch: main | base_commit: a8417ae | code_commit: 见T-03提交 | dependency_revisions: 同T-00 | task_ids: T-03 | evidence=docs/plans/attachments/002/verify-rec-vue-20261101-231622.json（vue 轨 31/31：跨月 CRUD/强杀重开/墙钟不改/unproven 横幅+拒写+保稿/consent 后下一次写入，local-only）+ src/front/{calendar_store,app}.at + tests/basic/{recovery_driver.mjs,verify_recovery_identity.py} | blockers=无（vm 轨由 T-04 统一门跑） | next_responsible_role=work（T-04）。
 - stage: work | plan_id: CALENDAR-002 | plan_revision: 1 | outcome: pass | worktree_path: D:/autostack/auto-calendar | branch: main | base_commit: 662c6f6 | code_commit: 见T-04提交 | dependency_revisions: 同T-00 | task_ids: T-04 | evidence=四门全绿（rec-vue 31/31、rec-vm 28/28 修复 oracle 后、basic-vue 19/19、basic-vm 11/11、深电池 30/30）+ docs/specs/calendar/{basic-capabilities.md §4 r2, recovery-identity.md} 候选稿 | blockers=无 | next_responsible_role=work（T-05）。
+- stage: work | plan_id: CALENDAR-002 | plan_revision: 1 | outcome: pass（execution_done） | worktree_path: D:/autostack/auto-calendar | branch: main | base_commit: 22503e8 | code_commit: 见T-05提交（文档同步，产品代码冻结于 22503e8） | dependency_revisions: auto CLI 0.1.0+plan-890-verified-r7-t19-5-g55c98c7（sha256 390e664e…）；auto-lang master 367258e7a（只读） | task_ids: T-05 | readiness: 工作面 AC-01..04 全部绑定实测断言（rec-vue 31/31、rec-vm 28/28、basic-vue 19/19、basic-vm 11/11、深电池 30/30，终态代码）；开放契约发现=无；受影响旧用例回放=basic 双 profile 即旧门全量；测试=四门族+三探针，本轮修复仅探针 oracle（vm 5 处），产品代码自 22503e8 前无变更；统一回归门 pending（owner=复审/merge，按仓工作流） | evidence=本文件§4漂移表+§8 T-05行+attachments/002 各 verify JSON（local-only） | blockers=无 | next_responsible_role=review（T-06 final review, review_scope=final）。
 - stage: work | plan_id: CALENDAR-002 | plan_revision: 1 | outcome: pass | worktree_path: D:/autostack/auto-calendar | branch: main | base_commit: 53587a4 | code_commit: 见T-01提交 | dependency_revisions: 同T-00 | task_ids: T-01 | evidence=plan-artifacts/plan-002/evidence/t01-ownproc-20261101-223625.json（5/5：旁观者三路径存活、自有收割只及注册pid）+ tests/free_ports.py（所有权门）+ tests/basic/verify_basic.py（kill_all/端口门收窄+工具身份入证） | blockers=无 | next_responsible_role=work（T-02）。
 
 ## 10. 待澄清事项

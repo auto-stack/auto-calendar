@@ -2,7 +2,9 @@
 
 日历，使用 AutoLang / AutoUI 开发的独立应用。
 
-更新：2026-11-01。001已交付归档/r2、7/7，真实今日和单次事件保持墙钟合同；F-5恢复后rev可能回退仍在案。 本轮未重跑产品验收。
+更新：2026-11-01。002 已实施（T-00..T-05）：恢复身份 v2（水位/墓碑/拒写保全）
+落地，F-5 恢复后 rev 回退窗口关闭；四门全绿（recovery vue 31/31、vm 28/28、
+basic vue 19/19、vm 11/11、深电池 30/30）， awaiting 独立复审。墙钟合同不变。
 
 ## 运行
 
@@ -13,12 +15,13 @@ auto run        # Vue（后端 17821 + 前端 17820）
 auto run -r vm  # VM 原生窗口（同一 rust 后端 17821）
 ```
 
-- 后端端口 `17821`、前端 `17820`（`pac.at`）。启动前端口必须空闲：`auto run` 对端口被占不静默换位。旧 `tests/free_ports.py` 按端口/命令行清理监听者，002会先收窄自有进程边界，不作为自动准备步骤。
+- 后端端口 `17821`、前端 `17820`（`pac.at`）。启动前端口必须空闲：`auto run` 对端口被占不静默换位。`python tests/free_ports.py --check` 只查不杀；进程收割仅限本运行自有进程（`tests/free_ports.py` Ownership 纪律，002 起），旁观实例永不清理。
 - 用户数据根：`AUTO_CALENDAR_DATA` 覆盖，缺省 `%APPDATA%/auto-calendar`。
 - 测试可控时钟：`AUTO_CALENDAR_TEST_MODE=1` + `AUTO_CALENDAR_FAKE_DATE` /
   `AUTO_CALENDAR_FAKE_TIME` / `AUTO_CALENDAR_FAKE_OFFSET_MIN`。
 - 基本能力验收（隔离数据目录，双端）：`python tests/basic/verify_basic.py --profile vue`
   与 `--profile vm`（需 tests/node_modules：`cd tests && pnpm install`）。
+- 恢复身份验收（002，双端）：`python tests/basic/verify_recovery_identity.py --profile vue|vm`。
 
 共享 StyleKit 已固定在 `vendor/stylekit`，无需相邻 auto-lang 示例目录。
 
@@ -40,8 +43,6 @@ AutoOS 通过 [`apps/auto-calendar`](https://github.com/auto-stack/auto-os/tree/
 
 ## 当前后续计划（2026-11-01）
 
-[CALENDAR-002：恢复后版本凭据与删除保全](docs/plans/002-recovery-revision-and-deletion.md) 为 **drafting/r1、0/8，尚未实施**。补旧条件凭据不重用、删除不复活、ID不冒充旧对象；区分新空库和缺证据旧库，恢复后下一次写入成立。
+[CALENDAR-002：恢复后版本凭据与删除保全](docs/plans/002-recovery-revision-and-deletion.md) 为 **r1、实施完成（6/8，T-06 复审 / T-07 归档待行）**。恢复身份 v2 已落地：`store/identity.json` 单调水位（rev_high/seq_high）+ 删除墓碑 + 证据不足拒写（`recovery_unproven` 只读保全态，唯一出口 `AUTO_CALENDAR_RECOVERY_CONSENT=accept-scan` 受控恢复）+ v1 迁移先备份。规范见 [docs/specs/calendar/recovery-identity.md](docs/specs/calendar/recovery-identity.md) 与 [basic-capabilities.md](docs/specs/calendar/basic-capabilities.md) §4（r2 修订稿随 merge 生效）。
 
-先T-00核验实际源码/CLI/编译或渲染tool、已有SDK、冷准备与失败边界；实证缺项才转实际owner最小前置。既有测试入口继续复用，历史绿总数不能替代新必需UI操作。只用隔离数据/本次进程；不清共享target或终止用户实例。无实证业务缺口时不为完成计划强改业务源码。
-
-[路线图](docs/roadmap-v0.6.md) · [现实现规范](docs/specs/calendar/basic-capabilities.md)。开发与顺序复审在D:/autostack/auto-calendar独立clone main，一app一写入者；不在OS组合子模块开发，不建junction/symlink。本轮只准备/提交push计划和导航，不实现、不改Spec/旧ledger和归档，不更新AutoOSpin。各app独立验收后由统一OS计划装配，Linux仍WAIT_DISTRO_M1。
+[路线图](docs/roadmap-v0.6.md) · [现实现规范](docs/specs/calendar/basic-capabilities.md)。开发与顺序复审在D:/autostack/auto-calendar独立clone main，一app一写入者；不在OS组合子模块开发，不建junction/symlink。不更新AutoOS pin；各app独立验收后由统一OS计划装配，Linux仍WAIT_DISTRO_M1。
