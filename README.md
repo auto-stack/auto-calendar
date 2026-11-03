@@ -48,3 +48,16 @@ AutoOS 通过 [`apps/auto-calendar`](https://github.com/auto-stack/auto-os/tree/
 下一步（另会话）：AutoOS 统一装配接收本仓已推送交付提交（gitlink/总表/detach，见归档计划 §10 移交项）；重复规则、提醒、CalDAV、DST 时刻语义另排，保持墙钟语义；Linux 仍 WAIT_DISTRO_M1。
 
 [路线图](docs/roadmap-v0.6.md) · [现实现规范](docs/specs/calendar/basic-capabilities.md) · [恢复身份规范](docs/specs/calendar/recovery-identity.md)。开发使用独立 clone `D:/autostack/auto-calendar` 的 main；AutoOS 内对应子模块仅固定已交付提交，流程见 [App开发与子模块](https://github.com/auto-stack/auto-os/blob/main/docs/design/strategy/app-submodule-workflow.md)。
+
+## 主题（auto-os/PLAN-056 接入）
+
+本产品已接入 AutoUI **官方主题包**正式消费面（2026-11-03，PLAN-056 T-02）：
+
+- `vendor/themes` 为 UI 管理渠道发布的固定版本快照（`themes` 0.2.0，内容
+  digest `9fa07742dc68aa5377ae06cb2d966386002063f184c515b6c5dddf8a6bef838e`），
+  经 `pac.at` `dep themes` 消费；快照不可二次编辑、非第二权威源。
+- 主合同在 **auto-os/PLAN-056**：pac `theme` 显式键移除（原 `light`）=
+  **follow 宿主**；`src/front/app.at` `design { theme: "Auto", mode:
+  dark_mode 派生 }` 为独立默认腿（默认 false=浅色，与原 pac 键语义等价）；
+  `use themes.themes: Auto` 注册收集链（C-11 合同）。验证：standalone
+  follow probe 5/5（像素级）+ tampered 源具名拒绝腿。

@@ -1,5 +1,9 @@
 use calendar_store: CalendarStore
 use calendar_util: build_month_grid, month_name
+// PLAN-056 T-02：官方主题包主题名导入（031 合同消费面——`dep themes` 声明
+// 使包可解析，本 use 把包内 pub 主题收进收集链；无此行 themes 树不注册，
+// design.theme/follow 宿主候选都会在 C-11 未注册拒绝）。
+use themes.themes: Auto
 
 use stylekit.styles: caption_text
 style nav_round_btn = "w-10 h-10 rounded-full hover:bg-accent text-foreground font-bold"
@@ -36,6 +40,18 @@ widget App {
         // Plan 448 F: weekday header as a list + for (replacing seven
         // hand-unrolled grid-item lines).
         var weekday_labels = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
+    }
+
+    // PLAN-056 T-02：主题设计默认（独立默认腿）。theme="Auto" 经 pac
+    // `dep themes`（vendor/themes 固定快照）注册的官方树解析；mode 由既有
+    // dark_mode 状态驱动（默认 false = 浅色，与原 pac theme:"light" 默认
+    // 等价；宿主回写链 458 语义不变）。桌面内宿主策略完整快照
+    // （family+mode）按 031 full-host 语义整体接管本默认（follow——pac
+    // theme 键保持缺省），独立/无宿主环境回落本默认；settings 面板
+    // Dark/Light 两键与 accent 色板既有语义原样。
+    design {
+        theme: "Auto"
+        mode: if .dark_mode { "dark" } else { "light" }
     }
 
     // Plan 522: derived grid as computed — month_name / build_month_grid are
