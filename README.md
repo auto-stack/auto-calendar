@@ -61,3 +61,6 @@ AutoOS 通过 [`apps/auto-calendar`](https://github.com/auto-stack/auto-os/tree/
   dark_mode 派生 }` 为独立默认腿（默认 false=浅色，与原 pac 键语义等价）；
   `use themes.themes: Auto` 注册收集链（C-11 合同）。验证：standalone
   follow probe 5/5（像素级）+ tampered 源具名拒绝腿。
+
+
+当前 SDK 的文件写入确认兼容由 [计划 003](docs/plans/003-current-sdk-file-write-confirmation.md) 跟踪，作为 [AutoOS PLAN-054](../auto-os/docs/plans/054-basic-apps-unified-assembly.md) 的具名组合前置。

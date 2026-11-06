@@ -1,12 +1,12 @@
 ---
 plan_id: CALENDAR-003
-status: drafting
+status: executing
 feature_name: 当前SDK文件写入确认兼容
 author: [Codex]
 created_at: 2026-11-06
 updated_at: 2026-11-06
 plan_revision: 1
-current_step: 0
+current_step: 1
 total_steps: 4
 base_branch: main
 base_commit: 936423929b1773ee4e683cc4e5c16adf201a67d4
@@ -69,7 +69,7 @@ T00定位已观察的真实调用与失败；T01完成 `write_confirmed` 及同�
 
 ## 8. 执行步骤
 
-- [ ] T00 owner_stage=work：复核失败/生产路径/现行SDK，确认有界方案。
+- [x] T00 owner_stage=work：复核失败/生产路径/现行SDK，确认有界方案。
 - [ ] T01 owner_stage=work：实现兼容与永久V02，正式生成编译V01，提交工作完成。
 - [ ] T02 owner_stage=review：同一clone独立上下文复审当前源/Spec提案及结果。
 - [ ] T03 owner_stage=merge：规范、父集成、提交push与归档；保留永久开发clone。
@@ -81,3 +81,7 @@ T00定位已观察的真实调用与失败；T01完成 `write_confirmed` 及同�
 ## 10. 待澄清事项
 
 无新用户语义决定。独立复审、正式编译与父实际消费均未完成；不以新计划登记冒称已修复。
+
+
+- stage:work | revision:r1 | round:1 | outcome:T00 complete/T01 in progress
+  Source/repository/clone main ownership checked, pre-existing front tmp/tests directories preserved. Notes formal native E0308 and Calendar formal10 type errors reproduced with SDK176. Notes permanent extraction test on original helper actually returned seven numeric0 values instead of required Bool values (exit1), exposing the VM return-code ambiguity too. This is not a compile-only fix: full-content confirmation and directory-empty control close the common cause. All9 Calendar original call sites route through one helper; only its primitive call remains. New permanent production-helper execution is pending green; no execution_done or app pin upgrade.

@@ -480,7 +480,7 @@ pub fn manifest_store(rev int, next_seq int, events_array str) bool {
     if !mk {
         return false
     }
-    return fs.write_text(manifest_path(), manifest_json(rev, next_seq, events_array))
+    return write_confirmed(manifest_path(), manifest_json(rev, next_seq, events_array))
 }
 
 /// "ev-17" → 17 (0 on malformed).
@@ -591,7 +591,7 @@ pub fn identity_store(gen str, rev_high int, seq_high int, tombstones str) bool 
     if !mk {
         return false
     }
-    return fs.write_text(identity_path(), identity_json(gen, rev_high, seq_high, tombstones))
+    return write_confirmed(identity_path(), identity_json(gen, rev_high, seq_high, tombstones))
 }
 
 fn maxi(a int, b int) int {
@@ -802,7 +802,7 @@ fn recover_both(ident str, man str) str {
     }
     if changed {
         var newman str = manifest_json(hi_rev, hi_seq + 1, merged)
-        if !fs.write_text(manifest_path(), newman) {
+        if !write_confirmed(manifest_path(), newman) {
             return ""
         }
     }
@@ -829,7 +829,7 @@ fn recover_scan(ident str) str {
     var hi_rev int = maxi(identity_rev_high(ident), scan_rev)
     var hi_seq int = maxi(identity_seq_high(ident), scan_seq)
     var newman str = manifest_json(hi_rev, hi_seq + 1, scan_entries)
-    if !fs.write_text(manifest_path(), newman) {
+    if !write_confirmed(manifest_path(), newman) {
         return ""
     }
     var tombs2 str = prune_tombstones(tombs, scan_entries)
@@ -851,7 +851,7 @@ fn recover_migrate(man str) str {
     if !mk {
         return ""
     }
-    var backed bool = fs.write_text(migration_backup_path(), raw)
+    var backed bool = write_confirmed(migration_backup_path(), raw)
     if !backed {
         return ""
     }
@@ -871,7 +871,7 @@ fn recover_migrate(man str) str {
     }
     var merged str = merge_entries(manifest_entries(man), scan_entries)
     var newman str = manifest_json(hi_rev, hi_seq + 1, merged)
-    if !fs.write_text(manifest_path(), newman) {
+    if !write_confirmed(manifest_path(), newman) {
         return ""
     }
     return "ok"
@@ -899,7 +899,7 @@ fn consent_recover() str {
     var old_man str = fs.read_text(manifest_path())
     report = report + ",\"manifest_remnant\":" + enc(old_man)
     report = report + "}"
-    var r_ok bool = fs.write_text(recovery_report_path(), report)
+    var r_ok bool = write_confirmed(recovery_report_path(), report)
     if !r_ok {
         return ""
     }
@@ -908,7 +908,7 @@ fn consent_recover() str {
         return ""
     }
     var newman str = manifest_json(scan_rev, scan_seq + 1, scan_entries)
-    if !fs.write_text(manifest_path(), newman) {
+    if !write_confirmed(manifest_path(), newman) {
         return ""
     }
     return "ok"
@@ -997,7 +997,7 @@ pub fn event_write(id str, rev int, event_json str) bool {
     if !mk {
         return false
     }
-    return fs.write_text(events_dir() + "/" + event_file_name(id, rev), event_json)
+    return write_confirmed(events_dir() + "/" + event_file_name(id, rev), event_json)
 }
 
 /// Delete every revision file of id (prefix "<id>.r") so recovery cannot
@@ -1044,4 +1044,18 @@ pub fn entry_rev(entries str, k int) int {
     var arr = json.parse(entries)
     var it = json.get_at(arr, k)
     return json.as_int(json.get(it, "rev"))
+}
+
+
+// Confirm the desired file state; the fs primitive's numeric result alone
+// does not establish a successful write on every supported runtime.
+fn write_confirmed(p str, c str) bool {
+    if fs.is_dir(p) {
+        return false
+    }
+    fs.write_text(p, c)
+    if !fs.exists(p) {
+        return false
+    }
+    return fs.read_text(p) == c
 }
