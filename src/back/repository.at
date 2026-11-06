@@ -1011,7 +1011,7 @@ pub fn event_delete_files(id str) bool {
         var name str = names[i]
         if name.starts_with(prefix) {
             var fdel str = events_dir() + "/" + name
-            if !fs.delete(fdel) {
+            if !delete_confirmed(fdel) {
                 return false
             }
         }
@@ -1058,4 +1058,15 @@ fn write_confirmed(p str, c str) bool {
         return false
     }
     return fs.read_text(p) == c
+}
+
+fn delete_confirmed(p str) bool {
+    if fs.is_dir(p) {
+        return false
+    }
+    if !fs.exists(p) {
+        return true
+    }
+    fs.delete(p)
+    return !fs.exists(p)
 }

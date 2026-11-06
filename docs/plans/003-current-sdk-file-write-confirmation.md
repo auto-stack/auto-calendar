@@ -5,7 +5,7 @@ feature_name: 当前SDK文件写入与删除确认兼容
 author: [Codex]
 created_at: 2026-11-06
 updated_at: 2026-11-06
-plan_revision: 2
+plan_revision: 3
 current_step: 1
 total_steps: 4
 base_branch: main
@@ -59,7 +59,7 @@ T00定位已观察的真实调用与失败；T01完成 `write_confirmed`、`dele
 |---|---|---|---|
 | V01 | work/AC01 | 正式auto build -r rust；生产write_confirmed | 旧版本已红，新版编译0；不得复用旧exe |
 | V02 | work/AC02 | tests/sdk_file_write.py，提取生产函数→实际VM：中文多行创建/覆盖、空普通文件、缺父目录、目录+空内容、只读不同内容、已有相同内容 | 真bool结果与实际文件全文/旧数据一致；只读不同内容false且原件SHA不变；目录不能因空读默认值误绿 |
-| V04 | work/AC02 | tests/sdk_file_delete.py提取实际删除辅助函数→VM：已有/缺失文件、只读文件、目录及带子项目录 | 真Bool与实际不存在一致，失败文件全文/目录子项不变；只对既有应用普通文件路径，不扩展设备/IPC资源 |
+| V04 | work/AC02 | tests/sdk_file_delete.py提取实际删除辅助函数→VM：已有/缺失文件、存活拒删句柄、目录及带子项目录 | 真Bool与实际不存在一致，失败文件全文/目录子项不变；只对既有应用普通文件路径，不扩展设备/IPC资源 |
 | V03 | merge/AC03 | 父054公开Vue/iced入口受影响真实任务 | Notes保存重开/辅助文件确认，Calendar增改删重开与恢复身份文件一致；最终共同SDK与pin具名绑定 |
 
 ## 7. 验收标准
@@ -90,3 +90,8 @@ T00定位已观察的真实调用与失败；T01完成 `write_confirmed`、`dele
 
 - stage:new | revision:r2 | round:2 | outcome:pass | next:work/T01 deletion compatibility
   Current formal native buildr180 eliminated nine write type errors but isolated the tenth original error: event_delete_files uses !fs.delete although current File::delete returns i64. This is the same current-SDK filesystem compatibility goal; update bounded design/SD01/AC02 supplementary path while retaining all prior write work and evidence. No task total, public API, storage schema, recovery/deletion intent or user goal changes. Inventory of all changed file-operation types across the six native app sources also identified Todo's ignored-result wrapper, separately owned by TODO-003; other apps use numeric results or ignore them. No new framework coercion. Parent054 original full-delivery authorization covers this necessary repair; review still pending, not a failed final-review cycle.
+
+
+- stage:new/work | revision:r3 | round:3 | outcome: valid failure fixture and deletion helper verified | next: current SDK formal build
+  Same invariant/design asr2; correct the proposed invalid-input representative: Windows/Rust permits unlinking a file with a readonly attribute, so that attribute did not establish a delete rejection. First test incorrectly assumed the file survived and its cleanup raised FileNotFoundError; not a product failure or accepted pass. A real live Python CRT read handle without FILE_SHARE_DELETE now denies unlink, and source helper reportsfalse while original bytes survive. Current permanent deletion5/5Bool controls green: existing/missing true, locked/emptydir/populateddir false, children intact; write7/7 remains green on same production source. No OS input/Win32 activation/ctypes operations, only owned ordinary file handles. Source change is one deletion call routed through delete_confirmed plus helper; original tombstone-before-delete/manifest-after-delete order untouched.
+  New Notes source formally compiledr179 exit0/189s. Calendar r180 has only the remaining old bool/int delete error (writes repaired); final formal rerun pending. Historical clone generated GPU locks reconciled with standard offline cargo update -p gpu-allocator@0.27.0 --recursive: only allocator's windows binding0.57→0.58, no package version changes, matching validated SDK. Source and Spec closure still needs independent review and actual parent consumption.
