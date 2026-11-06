@@ -1,11 +1,11 @@
 ---
 plan_id: CALENDAR-003
 status: executing
-feature_name: 当前SDK文件写入确认兼容
+feature_name: 当前SDK文件写入与删除确认兼容
 author: [Codex]
 created_at: 2026-11-06
 updated_at: 2026-11-06
-plan_revision: 1
+plan_revision: 2
 current_step: 1
 total_steps: 4
 base_branch: main
@@ -15,7 +15,7 @@ new_spec_components: []
 touched_goals: []
 ---
 
-# CALENDAR-003：当前 SDK 文件写入确认兼容
+# CALENDAR-003：当前 SDK 文件写入与删除确认兼容
 
 ## 0. 变更摘要
 
@@ -24,7 +24,7 @@ auto-os/PLAN-054 正式当前 SDK Rust 构建发现旧 `fs.write_text` 布尔用
 ## 1. 目标
 
 - G1：当前固定 SDK 下正式 Rust 生成编译成功，既有用户任务成立。
-- G2：写入拒绝/缺父目录/目录冒充文件时不得把旧或缺失内容确认成功。
+- G2：写入拒绝/缺父目录/目录冒充文件时不得把旧或缺失内容确认成功；删除以目标确已不存在确认，失败保留原文件并按原协议返回失败。
 - G3：九个原布尔写调用；manifest/identity/版本文件/迁移备份/恢复报告沿原顺序，不改变generation/水位/墓碑协议。
 
 ## 2. 架构方案
@@ -41,15 +41,15 @@ auto-os/PLAN-054 正式当前 SDK Rust 构建发现旧 `fs.write_text` 布尔用
 
 ## 5. 详细设计
 
-T00定位已观察的真实调用与失败；T01完成 `write_confirmed` 及同因调用收口。调用参数单次传递，先拒绝目录，写入后检查存在并全文比对；不新增状态全局变量。永久测试实际提取生产函数，fixture和输出仅在显式仓外scratch。
+T00定位已观察的真实调用与失败；T01完成 `write_confirmed`、`delete_confirmed` 及同因调用收口。调用参数单次传递，先拒绝目录，写入后检查存在并全文比对；删除辅助函数先拒绝目录、目标已不存在可幂等确认，否则调用原删除原语后检查不存在；仅替换event_delete_files的一个旧布尔删除判断，不改变墓碑先写/失败返回的原顺序。不新增状态全局变量。永久测试实际提取生产函数，fixture和输出仅在显式仓外scratch。
 
 ### 规范增量
 
 | delta_id | add/modify/retire | docs/specs/... target | before/after rule | rationale | AC |
 |---|---|---|---|---|---|
-| SD01 | modify | docs/specs/calendar/recovery-identity.md | 保留原存储合同，补辅助文件写入按普通文件及全文读回确认；不承诺物理写次数 | 现行SDK整数返回与VM错误码不足以单独确认内容 | AC01/02 |
+| SD01 | modify | docs/specs/calendar/recovery-identity.md | 保留原存储合同，补辅助文件写入按普通文件及全文读回确认、删除按目标不存在确认；不承诺物理写/删次数 | 现行SDK整数返回与VM错误码不足以单独确认内容 | AC01/02 |
 
-拟落地段落：辅助文件写入确认不依赖 `fs.write_text` 返回值真假；目录拒绝，普通文件存在且全文读回一致才返回true。已存在相同内容允许幂等确认。SQLite事务/Calendar身份水位与删除协议不因此改变。
+拟落地段落：辅助文件写入确认不依赖 `fs.write_text` 返回值真假；目录拒绝，普通文件存在且全文读回一致才返回true。已存在相同内容允许幂等确认。目录拒绝；删除成功须确认目标不存在，失败原文件保留，原身份水位/墓碑先写与删除协议不变。
 
 ## 6. 测试设计
 
@@ -59,12 +59,13 @@ T00定位已观察的真实调用与失败；T01完成 `write_confirmed` 及同�
 |---|---|---|---|
 | V01 | work/AC01 | 正式auto build -r rust；生产write_confirmed | 旧版本已红，新版编译0；不得复用旧exe |
 | V02 | work/AC02 | tests/sdk_file_write.py，提取生产函数→实际VM：中文多行创建/覆盖、空普通文件、缺父目录、目录+空内容、只读不同内容、已有相同内容 | 真bool结果与实际文件全文/旧数据一致；只读不同内容false且原件SHA不变；目录不能因空读默认值误绿 |
+| V04 | work/AC02 | tests/sdk_file_delete.py提取实际删除辅助函数→VM：已有/缺失文件、只读文件、目录及带子项目录 | 真Bool与实际不存在一致，失败文件全文/目录子项不变；只对既有应用普通文件路径，不扩展设备/IPC资源 |
 | V03 | merge/AC03 | 父054公开Vue/iced入口受影响真实任务 | Notes保存重开/辅助文件确认，Calendar增改删重开与恢复身份文件一致；最终共同SDK与pin具名绑定 |
 
 ## 7. 验收标准
 
 - AC01 owner_stage=work：当前SDK正式Rust构建成功，实际源/生成/产物身份一致。
-- AC02 owner_stage=work：V02实际执行，各有效/错误控制符合确认合同，无数据格式或API变更。
+- AC02 owner_stage=work：V02/V04实际执行，各有效/错误控制符合确认合同，无数据格式或API变更。
 - AC03 owner_stage=merge：独立pass、规范落地、父054新SDK实际消费成功、main提交push、归档回执完整；所有未达项保持pending。
 
 ## 8. 执行步骤
@@ -85,3 +86,7 @@ T00定位已观察的真实调用与失败；T01完成 `write_confirmed` 及同�
 
 - stage:work | revision:r1 | round:1 | outcome:T00 complete/T01 in progress
   Source/repository/clone main ownership checked, pre-existing front tmp/tests directories preserved. Notes formal native E0308 and Calendar formal10 type errors reproduced with SDK176. Notes permanent extraction test on original helper actually returned seven numeric0 values instead of required Bool values (exit1), exposing the VM return-code ambiguity too. This is not a compile-only fix: full-content confirmation and directory-empty control close the common cause. All9 Calendar original call sites route through one helper; only its primitive call remains. New permanent production-helper execution is pending green; no execution_done or app pin upgrade.
+
+
+- stage:new | revision:r2 | round:2 | outcome:pass | next:work/T01 deletion compatibility
+  Current formal native buildr180 eliminated nine write type errors but isolated the tenth original error: event_delete_files uses !fs.delete although current File::delete returns i64. This is the same current-SDK filesystem compatibility goal; update bounded design/SD01/AC02 supplementary path while retaining all prior write work and evidence. No task total, public API, storage schema, recovery/deletion intent or user goal changes. Inventory of all changed file-operation types across the six native app sources also identified Todo's ignored-result wrapper, separately owned by TODO-003; other apps use numeric results or ignore them. No new framework coercion. Parent054 original full-delivery authorization covers this necessary repair; review still pending, not a failed final-review cycle.
