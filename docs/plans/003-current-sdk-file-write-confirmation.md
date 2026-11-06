@@ -1,12 +1,12 @@
 ---
 plan_id: CALENDAR-003
-status: executing
+status: execution_done
 feature_name: 当前SDK文件写入与删除确认兼容
 author: [Codex]
 created_at: 2026-11-06
 updated_at: 2026-11-06
-plan_revision: 3
-current_step: 1
+plan_revision: 4
+current_step: 2
 total_steps: 4
 base_branch: main
 base_commit: 936423929b1773ee4e683cc4e5c16adf201a67d4
@@ -71,7 +71,7 @@ T00定位已观察的真实调用与失败；T01完成 `write_confirmed`、`dele
 ## 8. 执行步骤
 
 - [x] T00 owner_stage=work：复核失败/生产路径/现行SDK，确认有界方案。
-- [ ] T01 owner_stage=work：实现兼容与永久V02，正式生成编译V01，提交工作完成。
+- [x] T01 owner_stage=work：实现兼容与永久V02，正式生成编译V01，提交工作完成。
 - [ ] T02 owner_stage=review：同一clone独立上下文复审当前源/Spec提案及结果。
 - [ ] T03 owner_stage=merge：规范、父集成、提交push与归档；保留永久开发clone。
 
@@ -95,3 +95,14 @@ T00定位已观察的真实调用与失败；T01完成 `write_confirmed`、`dele
 - stage:new/work | revision:r3 | round:3 | outcome: valid failure fixture and deletion helper verified | next: current SDK formal build
   Same invariant/design asr2; correct the proposed invalid-input representative: Windows/Rust permits unlinking a file with a readonly attribute, so that attribute did not establish a delete rejection. First test incorrectly assumed the file survived and its cleanup raised FileNotFoundError; not a product failure or accepted pass. A real live Python CRT read handle without FILE_SHARE_DELETE now denies unlink, and source helper reportsfalse while original bytes survive. Current permanent deletion5/5Bool controls green: existing/missing true, locked/emptydir/populateddir false, children intact; write7/7 remains green on same production source. No OS input/Win32 activation/ctypes operations, only owned ordinary file handles. Source change is one deletion call routed through delete_confirmed plus helper; original tombstone-before-delete/manifest-after-delete order untouched.
   New Notes source formally compiledr179 exit0/189s. Calendar r180 has only the remaining old bool/int delete error (writes repaired); final formal rerun pending. Historical clone generated GPU locks reconciled with standard offline cargo update -p gpu-allocator@0.27.0 --recursive: only allocator's windows binding0.57→0.58, no package version changes, matching validated SDK. Source and Spec closure still needs independent review and actual parent consumption.
+
+
+### T03 跨仓整合的阶段顺序（有界合同澄清）
+
+用户应用规约要求独立clone/main开发、提交验证push后再更新AutoOS组合。此计划源码已在main开发；独立review通过当前代码/规范提案与work全部AC后，先推送具名“已审源码阶段”供父054候选组合验证。该动作不代表本计划已归档或最终交付pass。父候选只消费已提交/push/独立审核的源码，正式AutoOS gitlink交付仍等父验收关闭。随后完成本计划要求的父新SDK实际任务、规范落地、最终文档提交push与归档；最终Doc后继须证明src/pac与已测源码完全相等。所有AC/实际任务及原协议不变，未完成项不被转为pass。此顺序解决“应用先可获取、组合才可验证”的源发布依赖，不删减或转移任何既定验收。
+
+- stage:work | revision:r4 | round:4 | outcome:execution_done2/4 | code_commit:f007ef76fb5df374952432fb4fca3ef7a39d03ca | next: independent source/Spec review
+  Actual currentSDK formal native build and scoped checks: r182 exit0/44.46s; VMwrite7/7+delete5/5; actual generated Rust write4/4+delete4/4. SDK CLI84ffcd0782475f4a9f77ac626042c7a1354b23270930b985531f74212602425b / UItool56e50b44b3ff33c44a7fd61c1860e0fefeaa0efe7dd55fd6d1e7c9cf60382ea7, selected Langf032/UIa1db/Man2a9/OS5e18. Published artifact hash, generation inputs and exact current core dependency were checked for the actual generated-Rust execution; no copied implementation, stale binary or GUI/OS input synthesis. Unknown untracked front tmp/tests remain untouched; Notes formal receipt has no untracked src input.
+  Legacy generated GPU lock reconciliation is configuration only: cargo offline recursive update of allocator changes only its windows0.57→0.58 edge (no package version changes), identical to SDK. Before locks/logs retained; failed old-lock builds explicitly not counted. Scope ordinary app data files/directories, not arbitrary device/IPC resources. Existing unrelated application/UI/schema mechanisms remain unchanged; parent current-SDK actual tasks and final closeout still pending.
+  Native evidence: D:/autostack/plan-artifacts/plan-054/t07/generated-file-confirm-r178.json SHA256 768fda79093f9a13bb559a556215814dd08309fa3605855318c51fadc9052a96.
+  Native evidence: D:/autostack/plan-artifacts/plan-054/t07/generated-delete-confirm-r184.json SHA256 dc0b4d9fd5b0aef1eba8c7f2e80fa856d62de30d7ab8a6187138d60ae59ea5b5.
