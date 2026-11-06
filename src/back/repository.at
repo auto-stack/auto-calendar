@@ -1057,6 +1057,9 @@ fn write_confirmed(p str, c str) bool {
     if !fs.exists(p) {
         return false
     }
+    if c == "" && fs.file_size(p) != 0 {
+        return false
+    }
     return fs.read_text(p) == c
 }
 

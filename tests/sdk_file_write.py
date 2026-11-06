@@ -37,10 +37,18 @@ overwrite.write_text('old', encoding='utf-8')
 empty.write_text('old', encoding='utf-8')
 readonly.write_text('preserve-original', encoding='utf-8')
 already.write_text('same-content', encoding='utf-8')
+invalid_readonly, invalid_writable, empty_readonly = [run / name for name in
+    ('invalid-readonly.bin', 'invalid-writable.bin', 'empty-readonly.txt')]
+invalid_bytes = bytes.fromhex('fffe80')
+invalid_readonly.write_bytes(invalid_bytes)
+invalid_writable.write_bytes(invalid_bytes)
+empty_readonly.write_bytes(b'')
 payload = '第一段中文 54.25。\n第二段 8.125。'
 cases = [(create, payload, True), (overwrite, payload, True), (empty, '', True),
          (missing, payload, False), (directory, '', False),
-         (readonly, 'different-content', False), (already, 'same-content', True)]
+         (readonly, 'different-content', False), (already, 'same-content', True),
+         (invalid_readonly, '', False), (invalid_writable, '', True),
+         (empty_readonly, '', True)]
 probe = run / 'probe.at'
 program = 'use auto.fs\n' + body + '\n'
 for path, content, _ in cases:
@@ -49,10 +57,12 @@ probe.write_text(program, encoding='utf-8')
 try:
     os.chmod(readonly, stat.S_IREAD)
     os.chmod(already, stat.S_IREAD)
+    os.chmod(invalid_readonly, stat.S_IREAD)
+    os.chmod(empty_readonly, stat.S_IREAD)
     result = subprocess.run([str(Path(args.auto).resolve()), str(probe)], cwd=repo,
                             capture_output=True, text=True, encoding='utf-8', timeout=45)
 finally:
-    for path in (readonly, already):
+    for path in (readonly, already, invalid_readonly, empty_readonly):
         os.chmod(path, stat.S_IREAD | stat.S_IWRITE)
 (run / 'probe.log').write_text(result.stdout + result.stderr, encoding='utf-8')
 assert result.returncode == 0, result.stderr
@@ -66,6 +76,8 @@ assert empty.is_file() and empty.read_bytes() == b''
 assert not missing.exists() and directory.is_dir()
 assert readonly.read_text(encoding='utf-8') == 'preserve-original'
 assert already.read_text(encoding='utf-8') == 'same-content'
+assert invalid_readonly.read_bytes() == invalid_bytes
+assert invalid_writable.read_bytes() == empty_readonly.read_bytes() == b''
 receipt = {'production_source': str(source), 'function': function,
            'source_sha256': hashlib.sha256(source.read_bytes()).hexdigest(),
            'helper_sha256': hashlib.sha256(body.encode()).hexdigest(),
