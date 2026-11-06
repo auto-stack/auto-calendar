@@ -1,12 +1,12 @@
 ---
 plan_id: CALENDAR-003
-status: execution_done
+status: reviewed
 feature_name: 当前SDK文件写入与删除确认兼容
 author: [Codex]
 created_at: 2026-11-06
 updated_at: 2026-11-06
 plan_revision: 4
-current_step: 2
+current_step: 3
 total_steps: 4
 base_branch: main
 base_commit: 936423929b1773ee4e683cc4e5c16adf201a67d4
@@ -71,8 +71,8 @@ T00定位已观察的真实调用与失败；T01完成 `write_confirmed`、`dele
 ## 8. 执行步骤
 
 - [x] T00 owner_stage=work：复核失败/生产路径/现行SDK，确认有界方案。
-- [ ] T01 owner_stage=work：实现兼容与永久V02，正式生成编译V01，提交工作完成。
-- [ ] T02 owner_stage=review：同一clone独立上下文复审当前源/Spec提案及结果。
+- [x] T01 owner_stage=work：实现兼容与永久V02，正式生成编译V01，提交工作完成。
+- [x] T02 owner_stage=review：同一clone独立上下文复审当前源/Spec提案及结果。
 - [ ] T03 owner_stage=merge：规范、父集成、提交push与归档；保留永久开发clone。
 
 ## 9. 复审记录
@@ -126,3 +126,15 @@ T00定位已观察的真实调用与失败；T01完成 `write_confirmed`、`dele
 - stage: work | revision:r4 | round:186 | outcome: execution_done2/4 | code_commit:3d32f64118eb71edbdb28da7440640171be5a6f5 | finding:F-SDK-EMPTY-01 repaired | next: independent affected re-review
   Permanent source-extracted V02 now has10 actual VM controls per application. Exact review counterexample bytes ff fe 80 + readonly + requested empty text reproduced before repair: true rather than expected false, exit1 of the strengthened Notes regression (t07/notes-write-red-r186.log). Both helpers now require fs.file_size(p)==0 for empty desired text in addition to existing directory/existence/full readback checks. Verified actual SDK VM alias fs.file_size→auto.fs.size and actual probe3bytes; generated Rust facade uses metadata.len. No inferred write-status coercion or framework change. This closes the ordinary-file non-UTF8 fallback ambiguity without rejecting writable non-UTF8 files successfully truncated to empty or legitimate readonly empty files/idempotence.
   Both actual VM10/10 pass with true Bool values, readonly ff fe 80 unchanged, writable invalid bytes become exactly0bytes, readonly legitimate empty remains empty. All original7 controls retained. Formal regenerated currentSDK176 native builds: Notes exit0/86.33s, Calendar exit0/44.19s, frozen source commits above; source did not change during generation/build. Actual emitted Rust helpers extracted from matching source-bound generation receipts, published exe hashes rechecked, exact Cargo fingerprint core dependency linked:14/14 real-file controls pass, including the same three new cases per app. D:/autostack/plan-artifacts/plan-054/t07/generated-file-confirm-r186.json SHA2560d7bf8c28b56b6d2b1efaf9e4d9f3ed42f60f6cd5b16cd2bbef5a5492f5ccde8. Old evidence/review failure retained, not relabelled green. No changes to Calendar deletion helper/order, Notes SQLite, API/schema or foreign WIP. T02 and all T03 final consumer/spec/push/archive gates pending; no final delivery claim.
+
+
+### Independent affected re-review — F-SDK-EMPTY-01 closure
+
+- stage: review | review_scope: final (affected repair; earlier unaffected checks retained) | reviewer_identity: independent Codex context /root/review_app_sdk, no implementation edits | plan_revision: 4 | outcome: pass | worktree_path: D:/autostack/auto-calendar | branch: main | reviewed_commit: 196c7a6f94fe9f2f1472c6b10e00761a7f645156 | source_commit: 3d32f64118eb71edbdb28da7440640171be5a6f5 | base_commit: 936423929b1773ee4e683cc4e5c16adf201a67d4. Frozen HEAD and clean tracked implementation confirmed; foreign untracked WIP retained.
+- dependency_revisions: unchanged Lang f03226e10 / UI a1db3d79 / Man 2a9b16e / OS 5e186935, SDK176 CLI SHA256 84ffcd0782475f4a9f77ac626042c7a1354b23270930b985531f74212602425b. Relevant Spec docs/specs/calendar/recovery-identity.md SHA256 bba8bf3c450628f5b42515319ecdeeb08942e44f510b348524b1fd2fd75ae2d0; current proposed SD01 block SHA256 0191a6f991e828364358d2d78956105546f9081952603aa6f23ab2a1b706276d. No canonical Spec or legacy-ledger write.
+- finding closure: F-SDK-EMPTY-01 closed for the agreed ordinary-file scope. Actual source diff adds only empty-desired-content byte-size guard; native metadata failure returns -1, therefore the guard rejects unavailable size. VM file_size alias maps to auto.fs.size. Empty-string read-error fallback can no longer confirm a nonempty readonly file. Full readback still checks nonempty content; directory/existence guards remain. No data schema/API/protocol or Calendar deletion changes. SD01 explicitly requires zero actual byte length for empty desired text; this clarifies the same pre-existing confirmation invariant, not a new support reduction.
+- acceptance_results: AC01 pass via actual regenerated formal native r186 (Notes exit0/86.33s, Calendar exit0/44.19s), source-bound generation pac/src input hashes and published executable hashes independently rechecked. AC02 pass: independently executed `python tests/sdk_file_write.py --auto D:/autostack/plan-artifacts/plan-054/t04/frozen-sdk-r176/auto.exe --scratch D:/autostack/plan-artifacts/plan-054/t07/review-app-sdk` → exit0, 10/10 true Bool assertions. Original counterexample setup now false with exact fffe80 preserved; writable fffe80→empty succeeds with zero bytes; readonly legitimate empty remains true/zero bytes. All seven prior positive/negative controls retained. Permanent regression red-before-repair receipt inspected (Notes strengthened test exit1, only old invalid-readonly empty case wrong). Unchanged deletion/source/protocol evidence from first review retained.
+- independent native replay: matched emitted helper hash to current generated source and helper.rs, reset actual seven fixture files/readonly attributes and reran existing helper.exe; each app returns [true,false,false,false,false,true,true], old readonly bytes preserved, writable invalid bytes truncated, legitimate readonly empty accepted. Reused valid formal/harness source→Cargo fingerprint→core RLIB binding from before concurrent parent builds, not a fabricated current-cache claim. At review first identity check the old core hash matched; concurrent legitimate parent C2 builds later made that RLIB unavailable, while the source-bound published artifacts and already-built helper executables remain verifiable and replayable. No Cargo, target mutation or full-group repetition by review.
+- evidence: D:/autostack/plan-artifacts/plan-054/t07/generated-file-confirm-r186.json SHA256 0d7bf8c28b56b6d2b1efaf9e4d9f3ed42f60f6cd5b16cd2bbef5a5492f5ccde8; independent native replay review-app-sdk/native-r186-replay.json SHA256 b392c9ecab12d9f27b19b99c2867ea268a41b3ea4b1d937a626b80aaa4df1201; independent VM result review-app-sdk/confirmed-file-gyoisw6r/result.json. Durable expected/actual values above survive scratch deletion.
+- pending_closeout_gates: AC03/T03 parent054 actual common-SDK Vue/iced application tasks, canonical Spec landing, named reviewed-source push/candidate fetch, final source-equivalent doc successor, final push/pin/archive remain merge-owned pending. Source-stage ordering remains explicit/self-consistent and is now eligible on this reviewed baseline; no child final-delivery pass, push, pin or archive by this reviewer.
+- next: merge owner can publish named reviewed-source stage, then complete all parent task and final closeout gates. T01/T02 complete, state reviewed/current_step3/4; historical failure retained, not relabelled green. Todo earlier source/Spec pass unchanged.
