@@ -1,12 +1,12 @@
 ---
 plan_id: CALENDAR-003
-status: execution_done
+status: executing
 feature_name: 当前SDK文件写入与删除确认兼容
 author: [Codex]
 created_at: 2026-11-06
 updated_at: 2026-11-06
 plan_revision: 4
-current_step: 2
+current_step: 1
 total_steps: 4
 base_branch: main
 base_commit: 936423929b1773ee4e683cc4e5c16adf201a67d4
@@ -71,7 +71,7 @@ T00定位已观察的真实调用与失败；T01完成 `write_confirmed`、`dele
 ## 8. 执行步骤
 
 - [x] T00 owner_stage=work：复核失败/生产路径/现行SDK，确认有界方案。
-- [x] T01 owner_stage=work：实现兼容与永久V02，正式生成编译V01，提交工作完成。
+- [ ] T01 owner_stage=work：实现兼容与永久V02，正式生成编译V01，提交工作完成。
 - [ ] T02 owner_stage=review：同一clone独立上下文复审当前源/Spec提案及结果。
 - [ ] T03 owner_stage=merge：规范、父集成、提交push与归档；保留永久开发clone。
 
@@ -106,3 +106,18 @@ T00定位已观察的真实调用与失败；T01完成 `write_confirmed`、`dele
   Legacy generated GPU lock reconciliation is configuration only: cargo offline recursive update of allocator changes only its windows0.57→0.58 edge (no package version changes), identical to SDK. Before locks/logs retained; failed old-lock builds explicitly not counted. Scope ordinary app data files/directories, not arbitrary device/IPC resources. Existing unrelated application/UI/schema mechanisms remain unchanged; parent current-SDK actual tasks and final closeout still pending.
   Native evidence: D:/autostack/plan-artifacts/plan-054/t07/generated-file-confirm-r178.json SHA256 768fda79093f9a13bb559a556215814dd08309fa3605855318c51fadc9052a96.
   Native evidence: D:/autostack/plan-artifacts/plan-054/t07/generated-delete-confirm-r184.json SHA256 dc0b4d9fd5b0aef1eba8c7f2e80fa856d62de30d7ab8a6187138d60ae59ea5b5.
+
+
+### Independent source / Spec review — 2026-11-06
+
+- stage: review | review_scope: final | reviewer_identity: delegated independent Codex context /root/review_app_sdk (no implementation performed; model identity not exposed) | plan_revision: 4 | outcome: needs_fix
+- worktree_path: D:/autostack/auto-calendar | branch: main | reviewed_commit: 33408cdcd39b9a954c32a999d011c4a80b782ab4 | base_commit: 936423929b1773ee4e683cc4e5c16adf201a67d4. Existing real clone and single worktree verified with `git worktree list --porcelain`; user app-main rule governs. Implementation writes paused; tracked source clean at entry and verdict. Foreign untracked directories retained. Review skill and verification-contract read in full.
+- dependency_revisions: Lang f03226e10 / UI a1db3d79 / Man 2a9b16e / OS 5e186935; SDK frozen-sdk-r176 CLI SHA256 84ffcd0782475f4a9f77ac626042c7a1354b23270930b985531f74212602425b.
+- spec_inputs SHA256: bba8bf3c450628f5b42515319ecdeeb08942e44f510b348524b1fd2fd75ae2d0; frozen proposed `### 规范增量` text SHA256: 2415636071a2ca420e50e5d712c9d213a4cb8d4aaf9402d03c5ae402f2788039. Canonical Specs and legacy ledger untouched. `touched_goals: []` is appropriate: this is existing goal compatibility, no new goal identity.
+- acceptance_results: AC01 pass — reuse formal native build r179 (Notes, exit0/189s) or r182 (Calendar, exit0/44.46s); independently matched generation.json pac/src input hashes to current files and published executable hashes to receipts. AC02 fail — original permanent VM write7/7 independently replayed exit0 with exact Bool and file assertions, but holdout F-SDK-EMPTY-01 below fails. Calendar delete5/5 independently replayed exit0 including real locked handle; original tombstone → all versions delete → manifest ordering remains unchanged. AC03 pending merge-owned, not claimed complete.
+- source/provenance: complete baseline→HEAD source diff inspected; Notes only fs_write, Calendar all nine writes and one deletion predicate share helpers. No API/schema/SQLite/watermark/tombstone changes. Native generated helper evidence source extraction, current Cargo fingerprint→core RLIB linkage, published hash, ordinary-file controls inspected: generated-file-confirm-r178.json SHA256 768fda79093f9a13bb559a556215814dd08309fa3605855318c51fadc9052a96 (8 controls); generated-delete-confirm-r184.json SHA256 dc0b4d9fd5b0aef1eba8c7f2e80fa856d62de30d7ab8a6187138d60ae59ea5b5 (4 controls). GPU reconciliation changes only existing allocator windows dependency edge 0.57→0.58; no package version upgrade. No Cargo/global suite repeated.
+- F-SDK-EMPTY-01 | P1 | AC02/T01 | existing rule failure: rejected different-content write must return false and old bytes survive. Setup a normal file containing bytes `ff fe 80`, mark readonly, invoke actual production write helper with empty string through frozen SDK real VM. Expected false + original bytes; observed true + original bytes `fffe80` in both Notes and Calendar, exit0. This is a regular file and a supported empty-content request, not a device, symlink or physical-write-count claim. Root cause: read failure falls back to empty string (`auto-lang-core/src/a2r_std.rs` fs::read_text uses read_to_string(...).unwrap_or_default()), so equality with empty desired text cannot prove successful full read. Runtime VM reproduces the ambiguity too. The directory guard closes only another empty-default path.
+- minimal replay: run frozen-sdk-r176/auto.exe against the matching probe.at referenced in D:/autostack/plan-artifacts/plan-054/t07/review-app-sdk/invalid-utf8-review.json, with its readonly fixture re-established (otherwise the write can succeed). Receipt SHA256 3fee4497a43a26f6bbed5234bdcd1e8cc759f2c22e90a1ba3afb87778bbd559e; durable setup/expected/observed above permits recreation after scratch removal. Independent regular UTF-8 create/overwrite/empty, missing parent, directory, readonly different-text and readonly same-text controls all pass; retain them.
+- closing oracle: permanent source-extracted test covers readonly non-UTF8 old bytes + empty desired content, false plus old-byte preservation, with existing legitimate empty-file and idempotent controls retained; independently verify affected VM/native confirmation behavior using actual supported SDK facilities. This receipt does not prescribe an unverified fix or require framework changes. SD01 proposal states the right enduring contract but implementation does not yet satisfy its full-content claim; source/Spec approval withheld.
+- pending_closeout_gates: T03 parent054 common-SDK actual Vue/iced tasks, canonical Spec landing, source-bound final doc successor, push/pin and archive all remain pending. T03 ordering is explicit and self-consistent: after successful independent source/Spec review, publish named reviewed-source stage for candidate fetch, then actual parent tasks and final Spec/docs/push/archive. It grants no final delivery pass and does not waive any AC. This needs_fix prevents the source-stage publication until repaired/re-reviewed.
+- next: work in the same clone, close F-SDK-EMPTY-01 with targeted checks, commit repair then independent affected re-review. T01 reopened; T00 retained; current_step=1/4.
