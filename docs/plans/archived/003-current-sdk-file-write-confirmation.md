@@ -1,12 +1,12 @@
 ---
 plan_id: CALENDAR-003
-status: reviewed
+status: archived
 feature_name: 当前SDK文件写入与删除确认兼容
 author: [Codex]
 created_at: 2026-11-06
-updated_at: 2026-11-06
+updated_at: 2026-11-07
 plan_revision: 4
-current_step: 3
+current_step: 4
 total_steps: 4
 base_branch: main
 base_commit: 936423929b1773ee4e683cc4e5c16adf201a67d4
@@ -73,7 +73,7 @@ T00定位已观察的真实调用与失败；T01完成 `write_confirmed`、`dele
 - [x] T00 owner_stage=work：复核失败/生产路径/现行SDK，确认有界方案。
 - [x] T01 owner_stage=work：实现兼容与永久V02，正式生成编译V01，提交工作完成。
 - [x] T02 owner_stage=review：同一clone独立上下文复审当前源/Spec提案及结果。
-- [ ] T03 owner_stage=merge：规范、父集成、提交push与归档；保留永久开发clone。
+- [x] T03 owner_stage=merge：规范、父集成、提交push与归档；保留永久开发clone。
 
 ## 9. 复审记录
 
@@ -144,3 +144,8 @@ T00定位已观察的真实调用与失败；T01完成 `write_confirmed`、`dele
   Independent final source/Spec pass retained from recorded review; this successor changes only approved canonical documentation and Plan bookkeeping. Parent054 actual SDK195 Vue/iced both8required8pass0fail, all6nativev15 formally rebuilt/18artifactbindings/67inputhashes. Current task/reopen/next native andVue independent receipts are in D:/autostack/plan-artifacts/plan-054/t04; native calendar oracle and canonical-vue-calendar-oracle-r195.json bind full current consumer behavior. Notes id9rev3 fullChinese, Calendar ev4delete/allversionsabsent/reopen/generationg-new/rev11→12/ev5next/oldev3exact, Todo id1edit/done1/reopen/nextedit, Blog workw-1793988759935-1fulltitle/multiline/reopen/nextSave/current+revision8; relevant app behavior is verified, not substituted by API prewrite. Blog oldnativework titles remain complete; sourcephase unchanged.
   Parent permanentpacket gates: icedSHA cd232e671e0aa7a3c1e0637a5a98e055eb9343345756faf231ca442e1e2cc042; VueSHA 9c91aadc95570bc78e24251bfa44939b99b7c12fed25cd096de55360eb09db1d. Each current validator actual8/8exit0; Vue description-only metadata corrected from copied194label without changingcases/SDK/data/frames. Work source tree 9db0722f0c5935232066b728ecb07ff25e4d64da / pacblob 11f7872edabd603bd15efb3ccff44c55749b7486 frozen for final Doc descendant check. No wholecatalog rerun. Canonical delta matches reviewed proposal; Todo no-impact Spec conclusion retained because privatecleanup result annotation only and all6callers ignore result.
   Permanent independent app clone is retained per user policy. Foreign untracked WIP is untouched. Shared raw evidence remains protected by active parent054 for its finalreview, not a separate archived-child raw scope or indefinite hold. Final push/archive and parentfinalpin are not yet claimed.
+
+
+- stage:merge | completion_kind:delivered | checkpoints:landed/canonical_verified/archived/cleaned | delivery_commit:1ccb1b59e2fc735b07a26337fa4c8f50ebbf45fb | outcome:pass | archive:docs/plans/archived/003-current-sdk-file-write-confirmation.md
+  Independent merge-document audit /root/review_app_sdk passed this exact prepared commit: approved canonical delta accurate, src/pac byte-equivalent to reviewedsource, actualparent195Vue/native V03 complete, no new source/Specgap. Current canonical hashes {"docs\\specs\\calendar\\recovery-identity.md": "ac312837194663efe8b49e041b33e12ef4a60bdced31ffbfc8275775c9f77a22"}. Permanentclone retained by explicit user app rule; no temporary appworktree toremove. Foreign untracked WIP preserved, not mislabeled clean; allPlan-owned tracked changes committed. Sharedraw stays inside activeparent054scope until its own finalreview/cleanup, no duplicatechildscope/legacyledger/index write. FinalREADME/source links resolve to actualarchivedPlan.
+  Production-facing artifact observation (landing is documentation/source publication, not deployment): parent fixedSDK195 candidate formally rebuilt and actually ran this app on bothtracks. Permanentclone local generated executables were not redeployed by this docs-only closeout: rust-workspace\auto-calendar-c9b37efd\bin\debug\calendar.exe modified 2026-11-06T22:01:08.823560. They must be regenerated through the standard current SDK before standalone production use; no foreignservice restart.

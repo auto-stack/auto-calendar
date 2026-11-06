@@ -63,4 +63,4 @@ AutoOS 通过 [`apps/auto-calendar`](https://github.com/auto-stack/auto-os/tree/
   follow probe 5/5（像素级）+ tampered 源具名拒绝腿。
 
 
-当前 SDK 的文件写入确认兼容由 [计划 003](docs/plans/003-current-sdk-file-write-confirmation.md) 跟踪，作为 [AutoOS PLAN-054](../auto-os/docs/plans/054-basic-apps-unified-assembly.md) 的具名组合前置。
+当前 SDK 的文件写入确认兼容由 [计划 003](docs/plans/archived/003-current-sdk-file-write-confirmation.md) 跟踪，作为 [AutoOS PLAN-054](../auto-os/docs/plans/054-basic-apps-unified-assembly.md) 的具名组合前置。
