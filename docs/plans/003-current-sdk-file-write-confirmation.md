@@ -1,12 +1,12 @@
 ---
 plan_id: CALENDAR-003
-status: executing
+status: execution_done
 feature_name: 当前SDK文件写入与删除确认兼容
 author: [Codex]
 created_at: 2026-11-06
 updated_at: 2026-11-06
 plan_revision: 4
-current_step: 1
+current_step: 2
 total_steps: 4
 base_branch: main
 base_commit: 936423929b1773ee4e683cc4e5c16adf201a67d4
@@ -49,7 +49,7 @@ T00定位已观察的真实调用与失败；T01完成 `write_confirmed`、`dele
 |---|---|---|---|---|---|
 | SD01 | modify | docs/specs/calendar/recovery-identity.md | 保留原存储合同，补辅助文件写入按普通文件及全文读回确认、删除按目标不存在确认；不承诺物理写/删次数 | 现行SDK整数返回与VM错误码不足以单独确认内容 | AC01/02 |
 
-拟落地段落：辅助文件写入确认不依赖 `fs.write_text` 返回值真假；目录拒绝，普通文件存在且全文读回一致才返回true。已存在相同内容允许幂等确认。目录拒绝；删除成功须确认目标不存在，失败原文件保留，原身份水位/墓碑先写与删除协议不变。
+拟落地段落：辅助文件写入确认不依赖 `fs.write_text` 返回值真假；目录拒绝，普通文件存在且全文读回一致才返回true；目标为空时另须实际文件字节长度为0，避免文本读取失败默认空串造成误判。已存在相同内容允许幂等确认。目录拒绝；删除成功须确认目标不存在，失败原文件保留，原身份水位/墓碑先写与删除协议不变。
 
 ## 6. 测试设计
 
@@ -121,3 +121,8 @@ T00定位已观察的真实调用与失败；T01完成 `write_confirmed`、`dele
 - closing oracle: permanent source-extracted test covers readonly non-UTF8 old bytes + empty desired content, false plus old-byte preservation, with existing legitimate empty-file and idempotent controls retained; independently verify affected VM/native confirmation behavior using actual supported SDK facilities. This receipt does not prescribe an unverified fix or require framework changes. SD01 proposal states the right enduring contract but implementation does not yet satisfy its full-content claim; source/Spec approval withheld.
 - pending_closeout_gates: T03 parent054 common-SDK actual Vue/iced tasks, canonical Spec landing, source-bound final doc successor, push/pin and archive all remain pending. T03 ordering is explicit and self-consistent: after successful independent source/Spec review, publish named reviewed-source stage for candidate fetch, then actual parent tasks and final Spec/docs/push/archive. It grants no final delivery pass and does not waive any AC. This needs_fix prevents the source-stage publication until repaired/re-reviewed.
 - next: work in the same clone, close F-SDK-EMPTY-01 with targeted checks, commit repair then independent affected re-review. T01 reopened; T00 retained; current_step=1/4.
+
+
+- stage: work | revision:r4 | round:186 | outcome: execution_done2/4 | code_commit:3d32f64118eb71edbdb28da7440640171be5a6f5 | finding:F-SDK-EMPTY-01 repaired | next: independent affected re-review
+  Permanent source-extracted V02 now has10 actual VM controls per application. Exact review counterexample bytes ff fe 80 + readonly + requested empty text reproduced before repair: true rather than expected false, exit1 of the strengthened Notes regression (t07/notes-write-red-r186.log). Both helpers now require fs.file_size(p)==0 for empty desired text in addition to existing directory/existence/full readback checks. Verified actual SDK VM alias fs.file_size→auto.fs.size and actual probe3bytes; generated Rust facade uses metadata.len. No inferred write-status coercion or framework change. This closes the ordinary-file non-UTF8 fallback ambiguity without rejecting writable non-UTF8 files successfully truncated to empty or legitimate readonly empty files/idempotence.
+  Both actual VM10/10 pass with true Bool values, readonly ff fe 80 unchanged, writable invalid bytes become exactly0bytes, readonly legitimate empty remains empty. All original7 controls retained. Formal regenerated currentSDK176 native builds: Notes exit0/86.33s, Calendar exit0/44.19s, frozen source commits above; source did not change during generation/build. Actual emitted Rust helpers extracted from matching source-bound generation receipts, published exe hashes rechecked, exact Cargo fingerprint core dependency linked:14/14 real-file controls pass, including the same three new cases per app. D:/autostack/plan-artifacts/plan-054/t07/generated-file-confirm-r186.json SHA2560d7bf8c28b56b6d2b1efaf9e4d9f3ed42f60f6cd5b16cd2bbef5a5492f5ccde8. Old evidence/review failure retained, not relabelled green. No changes to Calendar deletion helper/order, Notes SQLite, API/schema or foreign WIP. T02 and all T03 final consumer/spec/push/archive gates pending; no final delivery claim.
